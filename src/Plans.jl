@@ -14,11 +14,11 @@
 2. You may test any filename to match to cards array 
     And you will have w::Plan object (::Solved or ::Trouble) 
 
-    w1 = plan( cards, \"text1.txt\" ) ::Plan
+    p1 = plan( cards, \"text1.txt\" ) ::Plan
 
 3. If you got w::Plan object, then you may get all dependencies of w
 
-    w1_all = with_deps(w1, cards) ::Array   # will contain ::Trouble elements if was unmatched addresses
+    p1_all = with_deps(w1, cards) ::Array   # will contain ::Trouble elements if was unmatched addresses
 
 """
 module Plans
@@ -53,7 +53,7 @@ export Codec, Plain, Gzip
 immutable Card{F<:Function, S<:Source, C<:Codec }
     need::F
     re::Regex
-    source::Type{S}
+    source::S
     codec::Type{C}
 end
 export Card
@@ -61,12 +61,13 @@ export Card
 abstract Plan
 export Plan
 
+Card{S<:Source,C<:Codec}( re::Regex, source::S, codec::Type{C}) = Card( (w::Plan)->nothing, re, source, codec )
 
 "Plan describes matched address,  typeof(source), typeof(codec), need() function"
 immutable Solved{F<:Function,S<:Source,C<:Codec}<:Plan
     need::F
     addr::RegexMatch
-    source::Type{S}
+    source::S
     codec::Type{C}
 end
 export Solved
@@ -78,10 +79,10 @@ end
 
 
 "for do-syntax call"
-Solved{S<:Source, C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C}) =
+Solved{S<:Source, C<:Codec}(addr::RegexMatch, source::S, codec::Type{C}) =
     Solved(()->nothing, addr, source, codec)
 
-Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C}) = Card( (w::Plan)->nothing, re, source, codec )
+
 
 
 "(Array{cards}, address) -> plan"
