@@ -18,7 +18,7 @@
 
 3. If you got w::Plan object, then you may get all dependencies of w
 
-    p1_all = with_deps(w1, cards) ::Array   # will contain ::Trouble elements if was unmatched addresses
+    p1_all = with_deps(p1, cards) ::Array   # will contain ::Trouble elements if was unmatched addresses
 
 """
 module Plans
@@ -27,12 +27,10 @@ abstract Source
 
 "File data source"
 immutable File<:Source
-    addr::AbstractString
 end
 
 "Command data source"
 immutable Command<:Source
-    addr::Cmd
 end
 
 export Source, File, Command
@@ -45,43 +43,90 @@ abstract Plain<:Codec
 
 "Gzip compressed data"
 abstract Gzip<:Codec
-
 export Codec, Plain, Gzip
 
 
-"""Card construct objects described re::Regex, typeof(source), typeof(codec), need() function"""
-immutable Card{F<:Function, S<:Source, C<:Codec }
-    need::F
+"""Card construct objects described re::Regex, typeof(source), typeof(codec), functions: need(), create(), iter()"""
+immutable Card{ S<:Source, C<:Codec }
     re::Regex
-    source::S
+    source::Type{S}
     codec::Type{C}
+    need::Function
+    create::Function
+    iter::Function
 end
 export Card
 
-abstract Plan
-export Plan
 
-Card{S<:Source,C<:Codec}( re::Regex, source::S, codec::Type{C}) = Card( (w::Plan)->nothing, re, source, codec )
+"Type for wrap need() function. See setneed() function."
+immutable Need
+ need::Function
+end
+
+"Card(...) |> need!() do w .... end # --> new Card (with 'need' field)"
+need!(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, Need(f), c.create, c.iter)
+export need!
+ 
+
+"Type for wrap create() function. See setcreate() function."
+immutable Create
+ create::Function
+end
+"Card(...) |> create!() do want ... end # ---> new Card with 'create' field"
+create!(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, Create(f), c.iter)
+export create!
+
+"Type for wrap iter"
+immutable Iter
+ iter::Function
+end
+
+"Card(...) |> iter!() do want .... end # --> new Card with 'iter' field"
+iter!(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, c.create, Iter(f))
+export iter!
+
+"Constructor with wrapped parameters: Need, Create, Iter."
+Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C},
+                            need::Need=Need( (w)->nothing),
+                                create::Create=Create( (w)->nothing),
+                                    iter::Iter=Iter((w)->nothing) )::Card = Card( re, source, codec, need.need, create.create, iter.iter )
+
+
+abstract Plan
 
 "Plan describes matched address,  typeof(source), typeof(codec), need() function"
-immutable Solved{F<:Function,S<:Source,C<:Codec}<:Plan
-    need::F
+immutable Solved{S<:Source,C<:Codec,F1<:Function}<:Plan
     addr::RegexMatch
-    source::S
+    source::Type{S}
     codec::Type{C}
+    need::F1
+    create::Function
+    iter::Function
+    
+    
 end
-export Solved
+
+"Creates Solved object"
+solved{S<:Source,C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C}, 
+            need::Function=(w)->nothing, 
+                create::Function=(w)->nothing, 
+                    iter::Function=(w)->nothing ) = Solved(addr,source,codec,need,create,iter)
+export solved                    
 
 "Used for unmatched addresses"
 immutable Trouble<:Plan
     addr::AbstractString
 end
+"Creates Troube object"
+trouble(addr::AbstractString) = Trouble(addr)
 
+export Plan, Solved, Trouble
 
-"for do-syntax call"
-Solved{S<:Source, C<:Codec}(addr::RegexMatch, source::S, codec::Type{C}) =
-    Solved(()->nothing, addr, source, codec)
-
+Solved{S<:Source, C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C}, 
+                                need::Need=Need((w)->nothing),
+                                    create::Create=Create((w)->nothing),
+                                        iter::Iter=Iter((w)->nothing)) = 
+                                            Solved( addr, source, codec, need.need, create.create, iter.iter )
 
 
 
@@ -99,15 +144,15 @@ export plan
 "(card, address)->plan"
 function plan( c::Card, adr::AbstractString)::Plan
     if (m=match(c.re, adr ))!=nothing
-        Solved(c.need, m, c.source, c.codec)
+        solved( m, c.source, c.codec, c.need)
     else
-        Trouble(adr)
+        trouble(adr)
     end
 end
 
 
 
-"""Recursive find all planss depended from given (and itself) """
+"""Recursive find all plans depended from given (and itself) """
 with_deps{C<:Card}( w::Solved, cc::Array{C} ) ::Array{Plan} = plans( Plan[], w, cc)
 export with_deps
 with_deps{T<:Trouble}( w::T, other... ) ::Array{Plan} = Plan[w]
