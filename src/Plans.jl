@@ -58,38 +58,23 @@ end
 export Card
 
 
-"Type for wrap need() function. See setneed() function."
-immutable Need
- need::Function
-end
-
 "Card(...) |> need() do w .... end # --> new Card (with 'need' field)"
-need(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, Need(f), c.create, c.iter)
+need(f::Function)::Function = (c::Card)->Card(c.re, c.source, c.codec, f, c.create, c.iter)
 export need
  
 
-"Type for wrap create() function. See setcreate() function."
-immutable Create
- create::Function
-end
 "Card(...) |> create() do want ... end # ---> new Card with 'create' field"
-create(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, Create(f), c.iter)
+create(f::Function)::Function = (c::Card)->Card(c.re, c.source, c.codec, c.need, f, c.iter)
 export create
 
-"Type for wrap iter"
-immutable Iter
- iter::Function
-end
 
 "Card(...) |> iter() do want .... end # --> new Card with 'iter' field"
-iter(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, c.create, Iter(f))
+iter(f::Function)::Function = (c::Card)->Card(c.re, c.source, c.codec, c.need, c.create, f)
 export iter
 
 "Constructor with wrapped parameters: Need, Create, Iter."
-Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C},
-                            need::Need=Need( (w)->nothing),
-                                create::Create=Create( (w)->nothing),
-                                    iter::Iter=Iter((w)->nothing) )::Card = Card( re, source, codec, need.need, create.create, iter.iter )
+Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C} )::Card = 
+    Card( re, source, codec, (w)->nothing, (w)->nothing, (w)->nothing )
 
 
 abstract Plan
@@ -102,8 +87,6 @@ immutable Solved{S<:Source,C<:Codec,F1<:Function}<:Plan
     need::F1
     create::Function
     iter::Function
-    
-    
 end
 
 "Creates Solved object"
@@ -111,7 +94,7 @@ solved{S<:Source,C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C},
             need::Function=(w)->nothing, 
                 create::Function=(w)->nothing, 
                     iter::Function=(w)->nothing ) = Solved(addr,source,codec,need,create,iter)
-export solved                    
+export solved
 
 "Used for unmatched addresses"
 immutable Trouble<:Plan
@@ -123,9 +106,9 @@ trouble(addr::AbstractString) = Trouble(addr)
 export Plan, Solved, Trouble
 
 Solved{S<:Source, C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C}, 
-                                need::Need=Need((w)->nothing),
-                                    create::Create=Create((w)->nothing),
-                                        iter::Iter=Iter((w)->nothing)) = 
+                                need::Function=(w)->nothing,
+                                    create::Function=(w)->nothing,
+                                        iter::Function=(w)->nothing) =
                                             Solved( addr, source, codec, need.need, create.create, iter.iter )
 
 
