@@ -63,27 +63,27 @@ immutable Need
  need::Function
 end
 
-"Card(...) |> need!() do w .... end # --> new Card (with 'need' field)"
-need!(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, Need(f), c.create, c.iter)
-export need!
+"Card(...) |> need() do w .... end # --> new Card (with 'need' field)"
+need(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, Need(f), c.create, c.iter)
+export need
  
 
 "Type for wrap create() function. See setcreate() function."
 immutable Create
  create::Function
 end
-"Card(...) |> create!() do want ... end # ---> new Card with 'create' field"
-create!(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, Create(f), c.iter)
-export create!
+"Card(...) |> create() do want ... end # ---> new Card with 'create' field"
+create(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, Create(f), c.iter)
+export create
 
 "Type for wrap iter"
 immutable Iter
  iter::Function
 end
 
-"Card(...) |> iter!() do want .... end # --> new Card with 'iter' field"
-iter!(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, c.create, Iter(f))
-export iter!
+"Card(...) |> iter() do want .... end # --> new Card with 'iter' field"
+iter(f::Function)::Card = (c::Card)->Card(c.re, c.source, c.codec, c.need, c.create, Iter(f))
+export iter
 
 "Constructor with wrapped parameters: Need, Create, Iter."
 Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C},
