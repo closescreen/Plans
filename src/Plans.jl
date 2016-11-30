@@ -23,6 +23,17 @@
 """
 module Plans
 
+
+"Sample of address object type"
+immutable Sample
+    addr::AbstractString
+end
+export Sample
+
+"Canstructs Sample object"
+sample( filename::AbstractString) = Sample( filename)
+export sample
+
 abstract Source
 
 "File data source"
@@ -48,6 +59,7 @@ export Codec, Plain, Gzip
 
 """Card construct objects described re::Regex, typeof(source), typeof(codec), functions: need(), create(), iter()"""
 immutable Card{ S<:Source, C<:Codec }
+    sample::Sample
     re::Regex
     source::Type{S}
     codec::Type{C}
@@ -57,24 +69,29 @@ immutable Card{ S<:Source, C<:Codec }
 end
 export Card
 
+"Constructor with wrapped parameters: Need, Create, Iter."
+Card{S<:Source,C<:Codec}(sample::Sample, re::Regex, source::Type{S}, codec::Type{C} )::Card = 
+    Card( sample, re, source, codec, (w)->nothing, (w)->nothing, (w)->nothing )
+
+"Sample(\"lala\") |> Card( re, ...)"
+Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C} )::Function = 
+    (s::Sample)->Card( s, re, source, codec, (w)->nothing, (w)->nothing, (w)->nothing )
+
 
 "Card(...) |> need() do w .... end # --> new Card (with 'need' field)"
-need(f::Function)::Function = (c::Card)->Card(c.re, c.source, c.codec, f, c.create, c.iter)
+need(f::Function)::Function = (c::Card)->Card(c.sample, c.re, c.source, c.codec, f, c.create, c.iter)
 export need
  
 
 "Card(...) |> create() do want ... end # ---> new Card with 'create' field"
-create(f::Function)::Function = (c::Card)->Card(c.re, c.source, c.codec, c.need, f, c.iter)
+create(f::Function)::Function = (c::Card)->Card(c.sample, c.re, c.source, c.codec, c.need, f, c.iter)
 export create
 
 
 "Card(...) |> iter() do want .... end # --> new Card with 'iter' field"
-iter(f::Function)::Function = (c::Card)->Card(c.re, c.source, c.codec, c.need, c.create, f)
+iter(f::Function)::Function = (c::Card)->Card(c.sample, c.re, c.source, c.codec, c.need, c.create, f)
 export iter
 
-"Constructor with wrapped parameters: Need, Create, Iter."
-Card{S<:Source,C<:Codec}( re::Regex, source::Type{S}, codec::Type{C} )::Card = 
-    Card( re, source, codec, (w)->nothing, (w)->nothing, (w)->nothing )
 
 
 abstract Plan
@@ -90,18 +107,18 @@ immutable Solved{S<:Source,C<:Codec,F1<:Function}<:Plan
 end
 
 "Creates Solved object"
-solved{S<:Source,C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C}, 
+_solved{S<:Source,C<:Codec}(addr::RegexMatch, source::Type{S}, codec::Type{C}, 
             need::Function=(w)->nothing, 
                 create::Function=(w)->nothing, 
                     iter::Function=(w)->nothing ) = Solved(addr,source,codec,need,create,iter)
-export solved
 
 "Used for unmatched addresses"
 immutable Trouble<:Plan
     addr::AbstractString
 end
+
 "Creates Troube object"
-trouble(addr::AbstractString) = Trouble(addr)
+_trouble(addr::AbstractString) = Trouble(addr)
 
 export Plan, Solved, Trouble
 
@@ -119,7 +136,7 @@ function plan{C<:Card}( cc::Array{C}, adr::AbstractString )::Plan
         w = plan( c, adr)
         typeof(w) <: Solved && return w
     end
-    Trouble(adr)
+    _trouble(adr)
 end
 export plan
 
@@ -127,9 +144,9 @@ export plan
 "(card, address)->plan"
 function plan( c::Card, adr::AbstractString)::Plan
     if (m=match(c.re, adr ))!=nothing
-        solved( m, c.source, c.codec, c.need)
+        _solved( m, c.source, c.codec, c.need)
     else
-        trouble(adr)
+        _trouble(adr)
     end
 end
 
