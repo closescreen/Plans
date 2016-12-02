@@ -1,5 +1,26 @@
 """
+Develop with testing:
+
+importall Plans 
+
+    c1 = sample(\"total10.txt\") |> 
+
+    Card( r\"total(\\d+)\.txt\", File, Plain ) |> 
+
+    need() do w;
+
+         [ \"source\$i.txt\" for i in 1:parse(Int,w.addr[1]) ] 
+
+    end
+
+c1 |> sample_plan
+
+c1 |> sample_deps
+
+
+ ---------- next --------------
 1. Create wanted number of cards:
+
     Any card::Card object will describe file, it properties and dependencies. 
 
         importall Plans
@@ -153,33 +174,32 @@ end
 
 
 """Recursive find all plans depended from given (and itself) """
-with_deps{C<:Card}( w::Solved, cc::Array{C} ) ::Array{Plan} = plans( Plan[], w, cc)
+with_deps{C<:Card}( w::Solved, cc::Array{C} ) ::Array{Plan} = _plans( Plan[], w, cc)
 export with_deps
 with_deps{T<:Trouble}( w::T, other... ) ::Array{Plan} = Plan[w]
 
 
 """( target-array[plans], plan, Array[cards] ) -> target-array[plans]
     where target-array[plans] is preallocated Array{Plan} to store result """
-function plans{W<:Plan,C<:Card}( ww::Array{W}, w::Plan, cc::Array{C} ) ::Array{Plan}
+function _plans{W<:Plan,C<:Card}( ww::Array{W}, w::Plan, cc::Array{C} ) ::Array{Plan}
     push!(ww, w)
     adrs = _need(w)::Array
-    plans( ww, adrs, cc)
+    _plans( ww, adrs, cc)
 end
-export plans
 
 
 """( target-array[plans], Array[addresses], Array[cards] ) -> target-array[plans]
     where target-array[plans] is preallocated Array{Plan} to store result"""
-function plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adrs::Array{S}, cc::Array{C} ) ::Array{Plan}
+function _plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adrs::Array{S}, cc::Array{C} ) ::Array{Plan}
     isempty(adrs) && return ww
     next_adr::S = shift!(adrs)
-    plans( plans( ww::Array{W}, next_adr, cc)::Array{Plan}, adrs::Array{S}, cc)
+    _plans( _plans( ww::Array{W}, next_adr, cc)::Array{Plan}, adrs::Array{S}, cc)
 end
 
 
 """( target-array[plans], address, Array[cards] ) -> target-array[plans]
     where target-array is preallocated Array{Plan}  to store result"""
-function plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adr::S, cc::Array{C}) ::Array{Plan}
+function _plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adr::S, cc::Array{C}) ::Array{Plan}
     push!(ww, plan( cc, adr))
 end
 
@@ -203,5 +223,15 @@ function _need{S<:Solved}(w::S)::Array
     end
 end
 
+"Creates sample p::Plan object for c::Card object based on his 'sample' field."
+sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
+export sample_plan
+
+"Creates sample array of p::Plans from c::Card and his 'sample' field."
+function sample_deps{C<:Card}( c::C ) ::Array{Plan}
+ p1 = plan( c, c.sample.addr )  
+ deps = with_deps( p1, [c])
+end
+export sample_deps
 
 end # module
