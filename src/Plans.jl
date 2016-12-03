@@ -7,9 +7,9 @@ importall Plans
 
     Card( r\"total(\\d+)\.txt\", File, Plain ) |> 
 
-    need() do w;
+need() do p; # first argument will be a p::Plan
 
-         [ \"source\$i.txt\" for i in 1:parse(Int,w.addr[1]) ] 
+         [ \"source\$i.txt\" for i in 1:parse( Int, p.addr[1]) ] 
 
     end
 
@@ -18,28 +18,6 @@ c1 |> sample_plan
 c1 |> sample_deps
 
 
- ---------- next --------------
-1. Create wanted number of cards:
-
-    Any card::Card object will describe file, it properties and dependencies. 
-
-        importall Plans
-
-        card_t1 = Card(r\"text\\d+\.txt\", File, Plain) ::Card
-
-        card_g1 = Card(r\"text\\d+\.gz\", File, Gzip) ::Card
-
-        cards = [card_t1, card_g1] ::Array
-
-
-2. You may test any filename to match to cards array 
-    And you will have w::Plan object (::Solved or ::Trouble) 
-
-    p1 = plan( cards, \"text1.txt\" ) ::Plan
-
-3. If you got w::Plan object, then you may get all dependencies of w
-
-    p1_all = with_deps(p1, cards) ::Array   # will contain ::Trouble elements if was unmatched addresses
 
 """
 module Plans
