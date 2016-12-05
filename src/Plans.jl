@@ -1,21 +1,21 @@
 """
 Develop with testing:
 
-importall Plans 
+    importall Plans 
 
     c1 = sample(\"total10.txt\") |> 
 
     card( r\"total(\\d+)\.txt\", File, Plain ) |> 
 
-need() do p; # first argument will be a p::Solved
+    needwill() do p; # first argument will be a p::Solved
 
-         [ \"source\$i.txt\" for i in 1:parse( Int, p.addr[1]) ] 
+     [ \"source\$i.txt\" for i in 1:parse( Int, p.addr[1]) ] 
 
     end
 
-c1 |> sample_plan
+    c1 |> sample_plan
 
-c1 |> sample_deps
+    c1 |> sample_deps
 
 
 
@@ -56,7 +56,7 @@ abstract Gzip<:Codec
 export Codec, Plain, Gzip
 
 
-"""Card construct objects described re::Regex, typeof(source), typeof(codec), functions: need(), prepare(), iter()"""
+"""Card construct objects described regex::Regex, typeof(source), typeof(codec), functions: need(), prepare(), iter()"""
 immutable Card{ S<:Source, C<:Codec }
     sample::Sample
     regex::Regex
@@ -86,7 +86,7 @@ card{S<:Source,C<:Codec}(
 export card
 
 
-"Sample(\"lala\") |> card( re, ...)"
+"Sample(\"lala\") |> card( regex, ...)"
 card{S<:Source,C<:Codec}( 
     regex::Regex, 
     sourcetype::Type{S}, 
@@ -95,44 +95,44 @@ card{S<:Source,C<:Codec}(
     (s::Sample)-> card( s, regex, sourcetype, codectype )
 
 
-"Card(...) |> ready() do w .... end # --> new Card (with 'need' field)"
-ready(f::Function)::Function = 
+"Card(...) |> readywill() do w .... end # --> new Card (with 'need' field)"
+readywill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
             need=c.need, prepare=c.prepare, ready=f, openit=c.openit, iterit=c.iterit)
-export ready
+export readywill
 
 
-"Card(...) |> need() do w .... end # --> new Card (with 'need' field)"
-need(f::Function)::Function = 
+"Card(...) |> needwill() do w .... end # --> new Card (with 'need' field)"
+needwill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
             need=f, prepare=c.prepare, ready=c.ready, openit=c.openit, iterit=c.iterit)
-export need
+export needwill
 
 
-"Card(...) |> prepare() do w .... end # --> new Card (with 'need' field)"
-prepare(f::Function)::Function = 
+"Card(...) |> preparewill() do w .... end # --> new Card (with 'need' field)"
+preparewill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
             need=c.need, prepare=f, ready=c.ready, openit=c.openit, iterit=c.iterit)
-export prepare
+export preparewill
 
 
-"Card(...) |> opeit() do w .... end # --> new Card (with 'need' field)"
-opeit(f::Function)::Function = 
+"Card(...) |> openwill() do w .... end # --> new Card (with 'need' field)"
+openwill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
             need=c.need, prepare=c.prepare, ready=c.ready, openit=f, iterit=c.iterit)
-export openit
+export openwill
 
 
-"Card(...) |> iterit() do w .... end # --> new Card (with 'need' field)"
-iterit(f::Function)::Function = 
+"Card(...) |> iterwill() do w .... end # --> new Card (with 'need' field)"
+iterwill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
             need=c.need, prepare=c.prepare, ready=c.ready, openit=c.openit, iterit=f)
-export iterit
+export iterwill
 
 
 abstract Plan
@@ -175,6 +175,12 @@ _trouble(addr::AbstractString) = Trouble(addr)
 export Plan, Solved, Trouble
 
 
+import Base.string
+"Returns address of plan as string"
+string(p::Solved) = p.addr.match.string
+string(t::Trouble) = t.addr
+export string
+
 
 "(Array{cards}, address) -> plan"
 function plan{C<:Card}( cc::Array{C}, adr::AbstractString )::Plan
@@ -189,8 +195,8 @@ export plan
 
 "(card, address)->plan"
 function plan( c::Card, adr::AbstractString)::Plan
-    if (m=match(c.re, adr ))!=nothing
-        _solved( m, c.source, c.codec, 
+    if (m=match(c.regex, adr ))!=nothing
+        _solved( m, c.sourcetype, c.codectype, 
             need=c.need, prepare=c.prepare, ready=c.ready, openit=c.openit, iterit=c.iterit)
     else
         _trouble(adr)
@@ -210,7 +216,7 @@ with_deps{T<:Trouble}( w::T, other... ) ::Array{Plan} = Plan[w]
     where target-array[plans] is preallocated Array{Plan} to store result """
 function _plans{W<:Plan,C<:Card}( ww::Array{W}, w::Plan, cc::Array{C} ) ::Array{Plan}
     push!(ww, w)
-    adrs = _need(w)::Array
+    adrs = need(w)::Array
     _plans( ww, adrs, cc)
 end
 
@@ -231,10 +237,11 @@ function _plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adr::S, cc::Ar
 end
 
 
-"plan -> Array[needs]"
-_need(w::Trouble)::Array = AbstractString[]
+"need(w::Plan) returns -> Array[needs] of dependencies of next sub level"
+need(w::Trouble)::Array = AbstractString[]
+export need
 
-function _need{S<:Solved}(w::S)::Array
+function need{S<:Solved}(w::S)::Array
     deps = w.need(w)
     t = typeof(deps)
     if t <: Array 
@@ -250,17 +257,72 @@ function _need{S<:Solved}(w::S)::Array
     end
 end
 
-"prepares sample p::Plan object for c::Card object based on his 'sample' field."
+"""Result represents returned value or exception
+
+    How to return error:
+
+    Result()
+
+    Result(ErrorException(\"no\"))
+
+    How to return value:
+    
+    Result(\"Ok\")
+    
+    Result(123)
+
+"""
+type Result
+ some::Bool
+ val
+
+ Result() = new( false, ErrorException("Some was wrong...") )
+ Result(e::Exception) = new( false, e)
+ Result(c) = new( true, c)
+end
+
+some( r::Result)::Bool = r.some
+
+import Base.get
+val(r::Result) = r.some ? r.val : error("$r has no value")
+val(r::Result, deflt) = r.some ? r.val : deflt
+err( r::Result ) = !r.some ? r.val : error("$r has no error")
+err( r::Result, deflt ) = !r.some ? r.val : deflt
+
+export Result,some,val,err
+
+
+
+"plan -> Result"
+prepare(w::Trouble)::Result = Result(ErrorException("Trouble cant be prepared: $w"))
+
+"Calls plan.prepare(plan, deps) and return it wrapped into Result"
+function prepare{S<:Solved}(w::S)::Result
+    deps = need(w)
+    try rv = w.prepare( w, deps)
+        return Result(rv)
+    catch e
+        return Result(e)
+    end    
+end
+
+
+"Prepares sample p::Plan object for c::Card object based on his 'sample' field."
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
 export sample_plan
 
-"prepares sample array of p::Plans from c::Card and his 'sample' field."
+"Prepares all sample dependencies as array of p::Plans from c::Card and his 'sample' field."
 function sample_deps{C<:Card}( c::C ) ::Array{Plan}
- p1 = plan( c, c.sample.addr )  
+ p1 = sample_plan(c)
  deps = with_deps( p1, [c])
 end
 export sample_deps
 
-
+"Prepares sample needs of sub-level"
+function sample_need{C<:Card}(c::C) ::Array{String}
+ p1 = sample_plan(c)
+ needs = need(p1)
+end 
+export sample_need
 
 end # module
