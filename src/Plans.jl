@@ -265,6 +265,7 @@ type Result
 end
 
 some( r::Result)::Bool = r.some
+iserr( r::Result)::Bool = !r.some
 
 import Base.get
 val(r::Result) = r.some ? r.val : error("$r has no value")
@@ -277,18 +278,32 @@ export Result,some,val,err
 
 
 "plan -> Result"
-prepare(t::Trouble)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
+prepare(t::Trouble, other...)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
+
+function prepare{ P<:Plan, C<:Card }( plans::Vector{P}, cards::Vector{C} )::Array{Result}
+ map( _->prepare( _, cards), plans)
+end
 
 "Calls plan.prepare(plan, deps) and return it wrapped into Result"
-function prepare{S<:Solved}(plan::S)::Result
-    deps = need(plan)
-    try rv = plan.prepare( plan, deps)
+function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
+    ok = ready( plan)
+    ok==nothing && return Result(ErrorException("ready() not implemented for $plan"))
+    info(ok)
+    ok && return Result( plan)
+    anddeps = with_deps( plan, cards)
+    anddeps|>info
+    shift!( anddeps)
+    errors = prepare( anddeps, cards) |> _->filter( iserr, _) |> collect
+    !isempty( errors) && return Result( ErrorException( "Errors: $errors - while prepare $plan"))
+    needs = need(plan)
+    try rv = plan.prepare( plan, needs)
         return Result(rv)
     catch e
         return Result(e)
-    end    
+    end
 end
 
+ready(plan::Plan ) = plan.ready(plan)
 
 "Creates sample p::Plan object for c::Card object based on his 'sample' field."
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
@@ -311,7 +326,7 @@ export sample_need
 "Does! prepare on sample plan."
 function sample_prepare{C<:Card}(c::C) ::Result
  p1 = sample_plan(c)
- rv = prepare(p1)
+ rv = prepare(p1, [c])
 end 
 export sample_prepare 
  
