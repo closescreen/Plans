@@ -1,24 +1,7 @@
 """
 Develop with testing:
 
-    importall Plans 
-
-    c1 = sample(\"total10.txt\") |> 
-
-    card( r\"total(\\d+)\.txt\", File, Plain ) |> 
-
-    needwill() do p; # first argument will be a p::Solved
-
-     [ \"source\$i.txt\" for i in 1:parse( Int, p.addr[1]) ] 
-
-    end
-
-    c1 |> sample_plan
-
-    c1 |> sample_deps
-
-
-
+...
 """
 module Plans
 
@@ -294,12 +277,12 @@ export Result,some,val,err
 
 
 "plan -> Result"
-prepare(w::Trouble)::Result = Result(ErrorException("Trouble cant be prepared: $w"))
+prepare(t::Trouble)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
 
 "Calls plan.prepare(plan, deps) and return it wrapped into Result"
-function prepare{S<:Solved}(w::S)::Result
-    deps = need(w)
-    try rv = w.prepare( w, deps)
+function prepare{S<:Solved}(plan::S)::Result
+    deps = need(plan)
+    try rv = plan.prepare( plan, deps)
         return Result(rv)
     catch e
         return Result(e)
@@ -307,22 +290,42 @@ function prepare{S<:Solved}(w::S)::Result
 end
 
 
-"Prepares sample p::Plan object for c::Card object based on his 'sample' field."
+"Creates sample p::Plan object for c::Card object based on his 'sample' field."
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
 export sample_plan
 
-"Prepares all sample dependencies as array of p::Plans from c::Card and his 'sample' field."
+"Returns all sample dependencies as array of p::Plans from c::Card and his 'sample' field."
 function sample_deps{C<:Card}( c::C ) ::Array{Plan}
  p1 = sample_plan(c)
  deps = with_deps( p1, [c])
 end
 export sample_deps
 
-"Prepares sample needs of sub-level"
+"Returns sample needs of sub-level"
 function sample_need{C<:Card}(c::C) ::Array{String}
  p1 = sample_plan(c)
  needs = need(p1)
 end 
 export sample_need
 
+"Does! prepare on sample plan."
+function sample_prepare{C<:Card}(c::C) ::Result
+ p1 = sample_plan(c)
+ rv = prepare(p1)
+end 
+export sample_prepare 
+ 
 end # module
+
+
+
+
+
+
+
+
+
+
+
+
+
