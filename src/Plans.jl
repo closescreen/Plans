@@ -48,8 +48,8 @@ immutable Card{ S<:Source, C<:Codec }
     need::Function
     prepare::Function
     ready::Function    
-    openit::Function
-    iterit::Function
+    open::Function
+    iter::Function
 end
 export Card
 
@@ -62,10 +62,10 @@ card{S<:Source,C<:Codec}(
     need::Function=(w)->nothing, 
     prepare::Function=(w)->nothing, 
     ready::Function=(w)->nothing, 
-    openit::Function=(w)->nothing, 
-    iterit::Function=(w)->nothing
+    open::Function=(w)->nothing, 
+    iter::Function=(w)->nothing
 )::Card = 
-    Card( sample, regex, sourcetype, codectype, need, prepare, ready, openit, iterit )
+    Card( sample, regex, sourcetype, codectype, need, prepare, ready, open, iter )
 export card
 
 
@@ -78,43 +78,78 @@ card{S<:Source,C<:Codec}(
     (s::Sample)-> card( s, regex, sourcetype, codectype )
 
 
-"Card(...) |> readywill() do w .... end # --> new Card (with 'need' field)"
+"""
+    Card(...) |> readywill() do plan
+        
+     filesize(\"$plan\")>0
+     
+    end # --> new Card (with 'need' field)
+"""
 readywill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=c.need, prepare=c.prepare, ready=f, openit=c.openit, iterit=c.iterit)
+            need=c.need, prepare=c.prepare, ready=f, open=c.open, iter=c.iter)
 export readywill
 
 
-"Card(...) |> needwill() do w .... end # --> new Card (with 'need' field)"
+"""
+    Card(...) |> needwill() do plan 
+    
+       ... use plan.addr::RegexMatch here 
+      
+      for create and return vector string
+    
+    end # --> new Card (with 'need' field)
+"""
 needwill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=f, prepare=c.prepare, ready=c.ready, openit=c.openit, iterit=c.iterit)
+            need=f, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
 export needwill
 
 
-"Card(...) |> preparewill() do w .... end # --> new Card (with 'need' field)"
+"""
+    Card(...) |> 
+    
+    preparewill() do plan,needs 
+    
+     .... use \"\$plan\" , needs
+    
+    end # --> new Card (with 'need' field)
+    
+"""
 preparewill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=c.need, prepare=f, ready=c.ready, openit=c.openit, iterit=c.iterit)
+            need=c.need, prepare=f, ready=c.ready, open=c.open, iter=c.iter)
 export preparewill
 
 
-"Card(...) |> openwill() do w .... end # --> new Card (with 'need' field)"
+"""
+    Card(...) |> openwill() do plan
+    
+     .... must return something openable ... 
+    
+    end # --> new Card (with 'need' field)
+"""
 openwill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=c.need, prepare=c.prepare, ready=c.ready, openit=f, iterit=c.iterit)
+            need=c.need, prepare=c.prepare, ready=c.ready, open=f, iter=c.iter)
 export openwill
 
 
-"Card(...) |> iterwill() do w .... end # --> new Card (with 'need' field)"
+"""
+    Card(...) |> iterwill() do plan 
+        
+        .... must return something iterable ... 
+        
+    end # --> new Card (with 'need' field)
+"""
 iterwill(f::Function)::Function = 
     (c::Card)->
         card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=c.need, prepare=c.prepare, ready=c.ready, openit=c.openit, iterit=f)
+            need=c.need, prepare=c.prepare, ready=c.ready, open=c.open, iter=f)
 export iterwill
 
 
@@ -129,8 +164,8 @@ immutable Solved{S<:Source,C<:Codec}<:Plan
     need::Function
     prepare::Function
     ready::Function
-    openit::Function
-    iterit::Function
+    open::Function
+    iter::Function
 end
 
 
@@ -142,9 +177,9 @@ _solved{S<:Source,C<:Codec}(
     need::Function=(w)->nothing, 
     prepare::Function=(w)->nothing, 
     ready::Function=(w)->nothing,
-    openit::Function=(w)->nothing,
-    iterit::Function=(w)->nothing ) = 
-        Solved( addr, sourcetype, codectype, need, prepare, ready, openit, iterit)
+    open::Function=(w)->nothing,
+    iter::Function=(w)->nothing ) = 
+        Solved( addr, sourcetype, codectype, need, prepare, ready, open, iter)
 
 
 "Used for unmatched addresses"
@@ -180,7 +215,7 @@ export plan
 function plan( c::Card, adr::AbstractString)::Plan
     if (m=match(c.regex, adr ))!=nothing
         _solved( m, c.sourcetype, c.codectype, 
-            need=c.need, prepare=c.prepare, ready=c.ready, openit=c.openit, iterit=c.iterit)
+            need=c.need, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
     else
         _trouble(adr)
     end
@@ -288,10 +323,8 @@ end
 function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
     ok = ready( plan)
     ok==nothing && return Result(ErrorException("ready() not implemented for $plan"))
-    info(ok)
     ok && return Result( plan)
     anddeps = with_deps( plan, cards)
-    anddeps|>info
     shift!( anddeps)
     errors = prepare( anddeps, cards) |> _->filter( iserr, _) |> collect
     !isempty( errors) && return Result( ErrorException( "Errors: $errors - while prepare $plan"))
@@ -303,7 +336,13 @@ function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
     end
 end
 
+"""Checks if plan is ready ::Bool"""
 ready(plan::Plan ) = plan.ready(plan)
+
+"""
+Return object for open() it
+"""
+open
 
 "Creates sample p::Plan object for c::Card object based on his 'sample' field."
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
