@@ -12,39 +12,16 @@ immutable Sample
 end
 export Sample
 
+
 "Canstructs Sample object"
 sample( filename::AbstractString) = Sample( filename)
 export sample
 
-abstract Source
 
-"File data source"
-immutable File<:Source
-end
-
-"Command data source"
-immutable Command<:Source
-end
-
-export Source, File, Command
-
-"Codec determines how to compress|decompress or other encoding|decoding input and output"
-abstract Codec
-
-"Not compressed data"
-abstract Plain<:Codec
-
-"Gzip compressed data"
-abstract Gzip<:Codec
-export Codec, Plain, Gzip
-
-
-"""Card construct objects described regex::Regex, typeof(source), typeof(codec), functions: need(), prepare(), iter()"""
-immutable Card{ S<:Source, C<:Codec }
+"""Card construct objects described regex::Regex functions: need(), prepare(), iter()"""
+immutable Card
     sample::Sample
     regex::Regex
-    sourcetype::Type{S}
-    codectype::Type{C}
     need::Function
     prepare::Function
     ready::Function    
@@ -54,40 +31,34 @@ end
 export Card
 
 
-card{S<:Source,C<:Codec}(
+card(
     sample::Sample, 
-    regex::Regex, 
-    sourcetype::Type{S}, 
-    codectype::Type{C}; 
+    regex::Regex; 
     need::Function=(w)->nothing, 
     prepare::Function=(w)->nothing, 
     ready::Function=(w)->nothing, 
     open::Function=(w)->nothing, 
     iter::Function=(w)->nothing
 )::Card = 
-    Card( sample, regex, sourcetype, codectype, need, prepare, ready, open, iter )
+    Card( sample, regex, need, prepare, ready, open, iter )
 export card
 
 
 "Sample(\"lala\") |> card( regex, ...)"
-card{S<:Source,C<:Codec}( 
-    regex::Regex, 
-    sourcetype::Type{S}, 
-    codectype::Type{C} 
-)::Function = 
-    (s::Sample)-> card( s, regex, sourcetype, codectype )
+card( regex::Regex )::Function = 
+    (s::Sample)-> card( s, regex )
 
 
 """
     Card(...) |> readywill() do plan
         
-     filesize(\"$plan\")>0
+     filesize(\"\$plan\")>0
      
     end # --> new Card (with 'need' field)
 """
 readywill(f::Function)::Function = 
     (c::Card)->
-        card( c.sample, c.regex, c.sourcetype, c.codectype, 
+        card( c.sample, c.regex, 
             need=c.need, prepare=c.prepare, ready=f, open=c.open, iter=c.iter)
 export readywill
 
@@ -103,8 +74,7 @@ export readywill
 """
 needwill(f::Function)::Function = 
     (c::Card)->
-        card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=f, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
+        card( c.sample, c.regex, need=f, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
 export needwill
 
 
@@ -118,10 +88,17 @@ export needwill
     end # --> new Card (with 'need' field)
     
 """
-preparewill(f::Function)::Function = 
+function preparewill(f::Function)::Function  
+    plan2 = "" # тут хорошо бы получить значения нужных типов
+    needs2 = ""
+    try method = @which( f(plan2,needs2)) # будет ошибка если нет метода на аргументах
+    catch e
+        error("Bad function signature returned by preparewill() $e")
+    end    
+
     (c::Card)->
-        card( c.sample, c.regex, c.sourcetype, c.codectype, 
-            need=c.need, prepare=f, ready=c.ready, open=c.open, iter=c.iter)
+        card( c.sample, c.regex, need=c.need, prepare=f, ready=c.ready, open=c.open, iter=c.iter)
+end        
 export preparewill
 
 
@@ -134,7 +111,7 @@ export preparewill
 """
 openwill(f::Function)::Function = 
     (c::Card)->
-        card( c.sample, c.regex, c.sourcetype, c.codectype, 
+        card( c.sample, c.regex, 
             need=c.need, prepare=c.prepare, ready=c.ready, open=f, iter=c.iter)
 export openwill
 
@@ -148,7 +125,7 @@ export openwill
 """
 iterwill(f::Function)::Function = 
     (c::Card)->
-        card( c.sample, c.regex, c.sourcetype, c.codectype, 
+        card( c.sample, c.regex, 
             need=c.need, prepare=c.prepare, ready=c.ready, open=c.open, iter=f)
 export iterwill
 
@@ -157,10 +134,8 @@ abstract Plan
 
 
 "Plan describes matched address, typeof(source), typeof(codec), need() function"
-immutable Solved{S<:Source,C<:Codec}<:Plan
+immutable Solved<:Plan
     addr::RegexMatch
-    sourcetype::Type{S}
-    codectype::Type{C}
     need::Function
     prepare::Function
     ready::Function
@@ -170,16 +145,14 @@ end
 
 
 "prepares Solved object"
-_solved{S<:Source,C<:Codec}(
-    addr::RegexMatch, 
-    sourcetype::Type{S}, 
-    codectype::Type{C}; 
+_solved(
+    addr::RegexMatch; 
     need::Function=(w)->nothing, 
     prepare::Function=(w)->nothing, 
     ready::Function=(w)->nothing,
     open::Function=(w)->nothing,
     iter::Function=(w)->nothing ) = 
-        Solved( addr, sourcetype, codectype, need, prepare, ready, open, iter)
+        Solved( addr, need, prepare, ready, open, iter)
 
 
 "Used for unmatched addresses"
@@ -214,8 +187,7 @@ export plan
 "(card, address)->plan"
 function plan( c::Card, adr::AbstractString)::Plan
     if (m=match(c.regex, adr ))!=nothing
-        _solved( m, c.sourcetype, c.codectype, 
-            need=c.need, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
+        _solved( m, need=c.need, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
     else
         _trouble(adr)
     end
@@ -322,27 +294,46 @@ end
 "Calls plan.prepare(plan, deps) and return it wrapped into Result"
 function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
     ok = ready( plan)
-    ok==nothing && return Result(ErrorException("ready() not implemented for $plan"))
+    ok==nothing && return Result(ErrorException("ready() return $ok (not implemented for $plan ?)"))
+    typeof(ok)<:Bool || return Result( ErrorException("ready() return $ok. Must return ::Bool"))
     ok && return Result( plan)
     anddeps = with_deps( plan, cards)
     shift!( anddeps)
-    errors = prepare( anddeps, cards) |> _->filter( iserr, _) |> collect
-    !isempty( errors) && return Result( ErrorException( "Errors: $errors - while prepare $plan"))
+    if !isempty( anddeps)
+        errors = prepare( anddeps, cards) |> _->filter( iserr, _) |> collect
+        !isempty( errors) && return Result( ErrorException( "Errors: $errors - while prepare $plan"))
+    end    
     needs = need(plan)
     try rv = plan.prepare( plan, needs)
         return Result(rv)
     catch e
-        return Result(e)
+        return Result( ErrorException( "Error in prepare().\nPlan:$plan.\n Exception:$e\n $( catch_stacktrace())" ))
     end
 end
 
 """Checks if plan is ready ::Bool"""
-ready(plan::Plan ) = plan.ready(plan)
+function ready(plan::Plan ) 
+    try rv = plan.ready(plan)
+        if typeof(rv)<:Bool
+            return rv
+        else
+            error("ready() must return ::Bool. ( rv = $rv , plan = $plan )")
+        end    
+        
+    catch e
+        error("Error while call plan.ready() on $plan : $e ")
+    end
+end    
+export ready
 
+import Base.open
 """
 Return object for open() it
 """
-open
+function open(plan::Plan)
+    plan.open(plan)
+end
+export open
 
 "Creates sample p::Plan object for c::Card object based on his 'sample' field."
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
@@ -362,12 +353,27 @@ function sample_need{C<:Card}(c::C) ::Array{String}
 end 
 export sample_need
 
-"Does! prepare on sample plan."
+"Does! prepare on sample."
 function sample_prepare{C<:Card}(c::C) ::Result
  p1 = sample_plan(c)
  rv = prepare(p1, [c])
 end 
 export sample_prepare 
+
+
+"Does ready() on sample"
+function sample_ready{C<:Card}(c::C) ::Bool
+ p1 = sample_plan(c)
+ rv = ready(p1)
+end
+export sample_ready
+
+"Does open on 'sample' field of card"
+function sample_open{C<:Card}(c::C)
+ p1 = sample_plan(c)
+ rv = open(p1)
+end
+export sample_open
  
 end # module
 
