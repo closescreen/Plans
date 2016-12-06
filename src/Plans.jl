@@ -56,10 +56,17 @@ card( regex::Regex )::Function =
      
     end # --> new Card (with 'need' field)
 """
-readywill(f::Function)::Function = 
+function readywill(f::Function)::Function 
+    plan2 = "" # хотелось бы чтоб и тип был
+    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+    catch e
+        error("Bad function signature returned by readywill() $e")
+    end    
+
     (c::Card)->
         card( c.sample, c.regex, 
             need=c.need, prepare=c.prepare, ready=f, open=c.open, iter=c.iter)
+end            
 export readywill
 
 
@@ -72,9 +79,16 @@ export readywill
     
     end # --> new Card (with 'need' field)
 """
-needwill(f::Function)::Function = 
+function needwill(f::Function)::Function
+    plan2 = "" # хотелось бы чтоб и тип был
+    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+    catch e
+        error("Bad function signature returned by needwill() $e")
+    end    
+
     (c::Card)->
         card( c.sample, c.regex, need=f, prepare=c.prepare, ready=c.ready, open=c.open, iter=c.iter)
+end
 export needwill
 
 
@@ -109,10 +123,17 @@ export preparewill
     
     end # --> new Card (with 'need' field)
 """
-openwill(f::Function)::Function = 
+function openwill(f::Function)::Function 
+    plan2 = "" # хотелось бы чтоб и тип был
+    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+    catch e
+        error("Bad function signature returned by openwill() $e")
+    end    
+
     (c::Card)->
         card( c.sample, c.regex, 
             need=c.need, prepare=c.prepare, ready=c.ready, open=f, iter=c.iter)
+end
 export openwill
 
 
@@ -123,10 +144,17 @@ export openwill
         
     end # --> new Card (with 'need' field)
 """
-iterwill(f::Function)::Function = 
+function iterwill(f::Function)::Function
+    plan2 = "" # хотелось бы чтоб и тип был
+    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+    catch e
+        error("Bad function signature returned by iterwill() $e")
+    end    
+
     (c::Card)->
         card( c.sample, c.regex, 
             need=c.need, prepare=c.prepare, ready=c.ready, open=c.open, iter=f)
+end
 export iterwill
 
 
