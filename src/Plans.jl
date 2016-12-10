@@ -210,7 +210,7 @@ export Plan, Solved, Trouble
 
 import Base.string
 "Returns address of plan as string"
-string(p::Solved) = p.addr.match.string
+string(p::Solved) = p.addr.match
 string(t::Trouble) = t.addr
 export string
 
