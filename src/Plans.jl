@@ -38,8 +38,8 @@ card(
     need::Function=(p)->nothing, 
     prepare::Function=(p)->nothing, 
     ready::Function= (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ), 
-    readable::Function=(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? `zcat $str` : str ),
-    writable_tmp::Function=(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? `gzip $str.TMP` : str*".TMP" ),
+    readable::Function=(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ),
+    writable_tmp::Function=(p)-> ( ismatch( r"\.gz(?=ip)?$"i, "$p") ? pipeline( `gzip`, tmp(p)) : tmp(p) ),
     iter::Function=(p)-> eachline( readable( p))
 )::Card = 
     Card( sample, regex, need, prepare, ready, readable, writable_tmp, iter )
@@ -214,6 +214,18 @@ string(p::Solved) = p.addr.match
 string(t::Trouble) = t.addr
 export string
 
+"""
+Returns tmp-name for writing it.
+
+Sample:
+
+\"\$( myplan|>tmp )\" # usage inside string interpolation
+
+"""
+tmp(p::Solved) = join( (p.addr.match, "TMP"), '.')
+tmp(t::Trouble) = join( (p.addr, "TMP"), '.')
+export tmp
+
 
 "(Array{cards}, address) -> plan"
 function plan{C<:Card}( cc::Array{C}, adr::AbstractString )::Plan
@@ -371,12 +383,22 @@ export ready
 
 
 """
-Return readable object for open() it
+Returns readable object for open() it
 """
 function readable( plan::Plan)
-    plan.readable( plan)
+    ready(plan) ? plan.readable( plan) : error("Can't return readable: $plan is not ready. Check ready(plan).")
 end
 export readable
+
+
+"""
+Returns iterator from readable
+"""
+function iter(plan::Plan)
+    ready( plan ) ? plan.iter( plan) : error( "Can't return iter: $plan is not ready. Check ready(plan).")
+end
+export iter
+
 
 """
 Return writable TMP object for open( ... ,\"w\") it
