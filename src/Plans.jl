@@ -14,173 +14,217 @@ export Sample
 
 
 "Canstructs Sample object"
-sample( filename::AbstractString) = Sample( filename)
+sample( addr::AbstractString) = Sample( addr)
 export sample
+ 
+
+immutable StringCard
+    sample::AbstractString
+    regex::Regex
+    prepare::Expr
+    ready::Expr
+    readable::Expr
+    iter::Expr
+end    
+export StringCard
+
+"Constructs StringCard from incomplete params"
+string_card( sample::AbstractString, regex::AbstractString, regexflags="", prepare="", ready="", readable="", iter="") =
+    StringCard( 
+        sample, 
+        Regex(regex, regexflags), # везде обернуть в try
+        prepare|>parse, 
+        ready|>parse, 
+        readable|>parse, 
+        iter|>parse )
+
+
+"""
+sample( \"lala1.txt\") |> card( \"lala\") # StringCard with sample and regex
+
+sample( \"lala1.txt\") |> card( \"lala\\\\d\\.txt\", \"i\") # the same and with flags
+"""
+card( re::AbstractString ) = (s::Sample)->string_card( s.addr, re)
+card( re::AbstractString, flags::AbstractString ) = (s::Sample)->string_card( s.addr, re, flags) 
+export card
+
+
+prepare_will( prepare::AbstractString) = (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, prepare)
+export prepare_will
+
+
+ready_will( ready::AbstractString) = (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, sc.prepare, ready)
+export ready_will
+
+
+readable_will( readable::AbstractString ) = (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, sc.prepare, sc.ready, readable)
+export readable_will
+
+
+iter_will( iter::AbstractString) = 
+    (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, sc.prepare, sc.ready, sc.readable, iter )
+export iter_will
+
 
 
 """Card construct objects described regex::Regex functions: need(), prepare(), iter()"""
 immutable Card
+    string_card::StringCard
     sample::Sample
     regex::Regex
     need::Function
     prepare::Function
     ready::Function    
     readable::Function
-    writable_tmp::Function
     iter::Function
 end
 export Card
 
-
-card(
-    sample::Sample, 
-    regex::Regex; 
-    need::Function=(p)->nothing, 
-    prepare::Function=(p)->nothing, 
-    ready::Function= (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ), 
-    readable::Function=(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ),
-    writable_tmp::Function=(p)-> ( ismatch( r"\.gz(?=ip)?$"i, "$p") ? pipeline( `gzip`, tmp(p)) : tmp(p) ),
-    iter::Function=(p)-> eachline( readable( p))
-)::Card = 
-    Card( sample, regex, need, prepare, ready, readable, writable_tmp, iter )
-export card
-
-
-"Sample(\"lala\") |> card( regex, ...)"
-card( regex::Regex )::Function = 
-    (s::Sample)-> card( s, regex )
-
-
 """
-    Card(...) |> ready_will() do plan
-        
-     filesize(\"\$plan\")>0
-     
-    end # --> new Card (with 'need' field)
+Constricts Card from StringCard
 """
-function ready_will(f::Function)::Function 
-    plan2 = "" # хотелось бы чтоб и тип был
-    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-    catch e
-        error("Bad function signature returned by ready_will() $e")
-    end    
+card( sc::StringCard ) = 
+    Card(
+        sc, 
+        Sample( sc.sample),
+        sc.regex,
+        try sc.need|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.need)") end,
+        try sc.prepare|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.prepare)") end,
+        try sc.ready|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.ready)") end,
+        try sc.readable|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.readable)") end,
+        try sc.iter|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.iter)") end
+    )
+export card    
 
-    (c::Card)->
-        card( c.sample, c.regex, 
-            need=c.need, prepare=c.prepare, ready=f, readable=c.readable, writable_tmp=c.writable_tmp, iter=c.iter)
-end            
-export ready_will
-
-
-"""
-    Card(...) |> need_will() do plan 
-    
-       ... use plan.addr::RegexMatch here 
-      
-      for create and return vector string
-    
-    end # --> new Card (with 'need' field)
-"""
-function need_will(f::Function)::Function
-    plan2 = "" # хотелось бы чтоб и тип был
-    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-    catch e
-        error("Bad function signature returned by need_will() $e")
-    end    
-
-    (c::Card)->
-        card( c.sample, c.regex, need=f, prepare=c.prepare, ready=c.ready, readable=c.readable, writable_tmp=c.writable_tmp, iter=c.iter)
-end
-export need_will
-
-
-"""
-    Card(...) |> 
-    
-    prepare_will() do plan,needs 
-    
-     .... use \"\$plan\" , needs
-    
-    end # --> new Card (with 'need' field)
-    
-"""
-function prepare_will(f::Function)::Function  
-    plan2 = "" # тут хорошо бы получить значения нужных типов
-    needs2 = ""
-    try method = @which( f(plan2,needs2)) # будет ошибка если нет метода на аргументах
-    catch e
-        error("Bad function signature returned by prepare_will() $e")
-    end    
-
-    (c::Card)->
-        card( c.sample, c.regex, need=c.need, prepare=f, ready=c.ready, readable=c.readable, writable_tmp=c.writable_tmp, iter=c.iter)
-end        
-export prepare_will
-
-
-"""
-    Card(...) |> readable_will() do plan
-    
-     .... must return something readable ... 
-    
-    end # --> new Card 
-"""
-function readable_will(f::Function)::Function 
-    plan2 = "" # хотелось бы чтоб и тип был
-    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-    catch e
-        error("Bad function signature returned by readable_will() $e")
-    end    
-
-    (c::Card)->
-        card( c.sample, c.regex, 
-            need=c.need, prepare=c.prepare, ready=c.ready, readable=f, writable_tmp=c.writable_tmp, iter=c.iter)
-end
-export readable_will
-
-
-
-"""
-    Card(...) |> writable_tmp_will() do plan
-    
-     .... must return something writable for write TMP ... 
-    
-    end # --> new Card 
-"""
-function writable_tmp_will(f::Function)::Function 
-    plan2 = "" # хотелось бы чтоб и тип был
-    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-    catch e
-        error("Bad function signature returned by writable_tmp_will() $e")
-    end    
-
-    (c::Card)->
-        card( c.sample, c.regex, 
-            need=c.need, prepare=c.prepare, ready=c.ready, readable=c.readable, writable_tmp=f, iter=c.iter)
-end
-export writable_tmp_will
-
-
-
-"""
-    Card(...) |> iter_will() do plan 
-        
-        .... must return something iterable ... 
-        
-    end # --> new Card (with 'need' field)
-"""
-function iter_will(f::Function)::Function
-    plan2 = "" # хотелось бы чтоб и тип был
-    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-    catch e
-        error("Bad function signature returned by iter_will() $e")
-    end    
-
-    (c::Card)->
-        card( c.sample, c.regex, 
-            need=c.need, prepare=c.prepare, ready=c.ready, readable=c.readable, writable_tmp=c.writable_tmp, iter=f)
-end
-export iter_will
+# их можно использовать для дополнительных установок свойств
+#"""
+#Conctructs Card from it params.
+#"""
+#card(
+#    sample::Sample, 
+#    regex::Regex; 
+#    need::Function=(p)->nothing, 
+#    prepare::Function=(p)->nothing, 
+#    ready::Function= (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ), 
+#    readable::Function=(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ),
+#    iter::Function=(p)-> eachline( readable( p))
+#)::Card = 
+#    Card( sample, regex, need, prepare, ready, readable, iter )
+#export card
+#
+#
+#"Sample(\"lala\") |> card( regex, ...)"
+#card( regex::Regex )::Function = 
+#    (s::Sample)-> card( s, regex )
+#
+#
+#"""
+#    Card(...) |> ready_will() do plan
+#        
+#     filesize(\"\$plan\")>0
+#     
+#    end # --> new Card (with 'need' field)
+#"""
+#function ready_will(f::Function)::Function 
+#    plan2 = "" # хотелось бы чтоб и тип был
+#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+#    catch e
+#        error("Bad function signature returned by ready_will() $e")
+#    end    
+#
+#    (c::Card)->
+#        card( c.sample, c.regex, 
+#            need=c.need, prepare=c.prepare, ready=f, readable=c.readable, iter=c.iter)
+#end            
+#export ready_will
+#
+#
+#"""
+#    Card(...) |> need_will() do plan 
+#    
+#       ... use plan.addr::RegexMatch here 
+#      
+#      for create and return vector string
+#    
+#    end # --> new Card (with 'need' field)
+#"""
+#function need_will(f::Function)::Function
+#    plan2 = "" # хотелось бы чтоб и тип был
+#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+#    catch e
+#        error("Bad function signature returned by need_will() $e")
+#    end    
+#
+#    (c::Card)->
+#        card( c.sample, c.regex, need=f, prepare=c.prepare, ready=c.ready, readable=c.readable, iter=c.iter)
+#end
+#export need_will
+#
+#
+#"""
+#    Card(...) |> 
+#    
+#    prepare_will() do plan,needs 
+#    
+#     .... use \"\$plan\" , needs
+#    
+#    end # --> new Card (with 'need' field)
+#    
+#"""
+#function prepare_will(f::Function)::Function  
+#    plan2 = "" # тут хорошо бы получить значения нужных типов
+#    needs2 = ""
+#    try method = @which( f(plan2,needs2)) # будет ошибка если нет метода на аргументах
+#    catch e
+#        error("Bad function signature returned by prepare_will() $e")
+#    end    
+#
+#    (c::Card)->
+#        card( c.sample, c.regex, need=c.need, prepare=f, ready=c.ready, readable=c.readable, iter=c.iter)
+#end        
+#export prepare_will
+#
+#
+#"""
+#    Card(...) |> readable_will() do plan
+#    
+#     .... must return something readable ... 
+#    
+#    end # --> new Card 
+#"""
+#function readable_will(f::Function)::Function 
+#    plan2 = "" # хотелось бы чтоб и тип был
+#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+#    catch e
+#        error("Bad function signature returned by readable_will() $e")
+#    end    
+#
+#    (c::Card)->
+#        card( c.sample, c.regex, 
+#            need=c.need, prepare=c.prepare, ready=c.ready, readable=f, iter=c.iter)
+#end
+#export readable_will
+#
+#
+#"""
+#    Card(...) |> iter_will() do plan 
+#        
+#        .... must return something iterable ... 
+#        
+#    end # --> new Card (with 'need' field)
+#"""
+#function iter_will(f::Function)::Function
+#    plan2 = "" # хотелось бы чтоб и тип был
+#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
+#    catch e
+#        error("Bad function signature returned by iter_will() $e")
+#    end    
+#
+#    (c::Card)->
+#        card( c.sample, c.regex, 
+#            need=c.need, prepare=c.prepare, ready=c.ready, readable=c.readable, iter=f)
+#end
+#export iter_will
 
 
 abstract Plan
@@ -188,13 +232,8 @@ abstract Plan
 
 "Plan describes matched address, typeof(source), typeof(codec), need() function"
 immutable Solved<:Plan
+    card::Card
     addr::RegexMatch
-    need::Function
-    prepare::Function
-    ready::Function
-    readable::Function
-    writable_tmp::Function
-    iter::Function
 end
 
 
@@ -222,9 +261,9 @@ Sample:
 \"\$( myplan|>tmp )\" # usage inside string interpolation
 
 """
-tmp(p::Solved) = join( (p.addr.match, "TMP"), '.')
-tmp(t::Trouble) = join( (p.addr, "TMP"), '.')
-export tmp
+tmpname(p::Solved) = join( (p.addr.match, "TMP"), '.')
+tmpname(t::Trouble) = join( (p.addr, "TMP"), '.')
+export tmpname
 
 
 "(Array{cards}, address) -> plan"
@@ -240,53 +279,55 @@ export plan
 
 "(card, address)->plan"
 function plan( c::Card, adr::AbstractString)::Plan
-    if (m=match(c.regex, adr ))!=nothing
-        Solved( m, c.need, c.prepare, c.ready, c.readable, c.writable_tmp, c.iter)
+    if (m=match( c.regex, adr)) != nothing
+        Solved( c, m)
     else
-        Trouble(adr)
+        Trouble( adr)
     end
 end
 
 
 
 """Recursive find all plans depended from given (and itself) """
-with_deps{C<:Card}( w::Solved, cc::Array{C} ) ::Array{Plan} = _plans( Plan[], w, cc)
+with_deps{C<:Card}( plan::Solved, cc::Array{C} ) ::Array{Plan} = _plans( Plan[], plan, cc)
 export with_deps
 
-with_deps{T<:Trouble}( w::T, other... ) ::Array{Plan} = Plan[w]
+
+with_deps{T<:Trouble}( t::T, other... ) ::Array{Plan} = Plan[t]
 
 
 """( target-array[plans], plan, Array[cards] ) -> target-array[plans]
     where target-array[plans] is preallocated Array{Plan} to store result """
-function _plans{W<:Plan,C<:Card}( ww::Array{W}, w::Plan, cc::Array{C} ) ::Array{Plan}
-    push!(ww, w)
-    adrs = need(w)::Array
-    _plans( ww, adrs, cc)
+function _plans{P<:Plan,C<:Card}( pp::Array{P}, p::Plan, cc::Array{C} ) ::Array{Plan}
+    push!(pp, p)
+    adrs = need(p)::Array
+    _plans( pp, adrs, cc)
 end
 
 
 """( target-array[plans], Array[addresses], Array[cards] ) -> target-array[plans]
     where target-array[plans] is preallocated Array{Plan} to store result"""
-function _plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adrs::Array{S}, cc::Array{C} ) ::Array{Plan}
-    isempty(adrs) && return ww
+function _plans{P<:Plan,S<:AbstractString,C<:Card}( pp::Array{P}, adrs::Array{S}, cc::Array{C} ) ::Array{Plan}
+    isempty(adrs) && return pp
     next_adr::S = shift!(adrs)
-    _plans( _plans( ww::Array{W}, next_adr, cc)::Array{Plan}, adrs::Array{S}, cc)
+    _plans( _plans( pp::Array{P}, next_adr, cc)::Array{Plan}, adrs::Array{S}, cc)
 end
 
 
 """( target-array[plans], address, Array[cards] ) -> target-array[plans]
     where target-array is preallocated Array{Plan}  to store result"""
-function _plans{W<:Plan,S<:AbstractString,C<:Card}( ww::Array{W}, adr::S, cc::Array{C}) ::Array{Plan}
-    push!(ww, plan( cc, adr))
+function _plans{P<:Plan,S<:AbstractString,C<:Card}( pp::Array{P}, adr::S, cc::Array{C}) ::Array{Plan}
+    push!(pp, plan( cc, adr))
 end
 
 
-"need(w::Plan) returns -> Array[needs] of dependencies of next sub level"
-need(w::Trouble)::Array = AbstractString[]
+"need(p::Plan) returns -> Array[needs] of dependencies of next sub level"
+need(::Trouble)::Array = AbstractString[]
 export need
 
-function need{S<:Solved}(w::S)::Array
-    deps = w.need(w)
+
+function need{S<:Solved}(p::S)::Array
+    deps = p.card.need(p)
     t = typeof(deps)
     if t <: Array 
         if eltype(deps)<:AbstractString
@@ -297,9 +338,10 @@ function need{S<:Solved}(w::S)::Array
     elseif t<: Void
         return AbstractString[]
     else
-        error("$w: need() must return Array, but was returned $t : $deps")
+        error("$p: need() must return Array, but was returned $t : $deps")
     end
 end
+
 
 """Result represents returned value or exception
 
@@ -325,12 +367,14 @@ type Result
  Result(c) = new( true, c)
 end
 
+
 some( r::Result)::Bool = r.some
 iserr( r::Result)::Bool = !r.some
 
+
 import Base.get
-val(r::Result) = r.some ? r.val : error("$r has no value")
-val(r::Result, deflt) = r.some ? r.val : deflt
+val( r::Result) = r.some ? r.val : error("$r has no value")
+val( r::Result, deflt) = r.some ? r.val : deflt
 err( r::Result ) = !r.some ? r.val : error("$r has no error")
 err( r::Result, deflt ) = !r.some ? r.val : deflt
 
@@ -339,12 +383,14 @@ export Result,some,val,err
 
 
 "plan -> Result"
-prepare(t::Trouble, other...)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
+prepare( t::Trouble, other...)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
 export prepare
+
 
 function prepare{ P<:Plan, C<:Card }( plans::Vector{P}, cards::Vector{C} )::Array{Result}
  map( _->prepare( _, cards), plans)
 end
+
 
 "Calls plan.prepare(plan, deps) and return it wrapped into Result"
 function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
@@ -359,16 +405,17 @@ function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
         !isempty( errors) && return Result( ErrorException( "Errors: $errors - while prepare $plan"))
     end    
     needs = need(plan)
-    try rv = plan.prepare( plan, needs)
+    try rv = plan.card.prepare( plan, needs)
         return Result(rv)
     catch e
         return Result( ErrorException( "Error in prepare().\nPlan:$plan.\n Exception:$e\n $( catch_stacktrace())" ))
     end
 end
 
+
 """Checks if plan is ready ::Bool"""
 function ready(plan::Plan ) 
-    try rv = plan.ready( plan)
+    try rv = plan.card.ready( plan)
         if typeof(rv)<:Bool
             return rv
         else
@@ -376,7 +423,7 @@ function ready(plan::Plan )
         end    
         
     catch e
-        error("Error while call plan.ready() on $plan : $e ")
+        error("Error while call plan.card.ready() on $plan : $e ")
     end
 end    
 export ready
@@ -386,7 +433,7 @@ export ready
 Returns readable object for open() it
 """
 function readable( plan::Plan)
-    ready(plan) ? plan.readable( plan) : error("Can't return readable: $plan is not ready. Check ready(plan).")
+    ready(plan) ? plan.card.readable( plan) : error("Can't return readable: $plan is not ready. Check ready(plan).")
 end
 export readable
 
@@ -395,18 +442,10 @@ export readable
 Returns iterator from readable
 """
 function iter(plan::Plan)
-    ready( plan ) ? plan.iter( plan) : error( "Can't return iter: $plan is not ready. Check ready(plan).")
+    ready( plan ) ? plan.card.iter( plan) : error( "Can't return iter: $plan is not ready. Check ready(plan).")
 end
 export iter
 
-
-"""
-Return writable TMP object for open( ... ,\"w\") it
-"""
-function writable_tmp( plan::Plan)
-    plan.writable_tmp( plan)
-end
-export writable_tmp
 
 "Creates sample p::Plan object for c::Card object based on his 'sample' field."
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
@@ -449,14 +488,6 @@ function sample_readable{C<:Card}(c::C)
 end
 export sample_readable
 
-
-
-"Does open for wtite on 'sample' field of card"
-function sample_writable_tmp{C<:Card}(c::C)
- p1 = sample_plan(c)
- rv = writable_tmp(p1)
-end
-export sample_writable_tmp
 
  
 end # module
