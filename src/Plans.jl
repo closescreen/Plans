@@ -328,6 +328,7 @@ export Result,some,val,err
 
 "plan -> Result"
 prepare(t::Trouble, other...)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
+export prepare
 
 function prepare{ P<:Plan, C<:Card }( plans::Vector{P}, cards::Vector{C} )::Array{Result}
  map( _->prepare( _, cards), plans)
