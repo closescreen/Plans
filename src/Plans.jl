@@ -29,14 +29,21 @@ end
 export StringCard
 
 "Constructs StringCard from incomplete params"
-string_card( sample::AbstractString, regex::AbstractString, regexflags="", prepare="", ready="", readable="", iter="") =
-    StringCard( 
-        sample, 
-        Regex(regex, regexflags), # везде обернуть в try
-        prepare|>parse, 
-        ready|>parse, 
-        readable|>parse, 
-        iter|>parse )
+string_card(
+    sample::AbstractString,
+    regex::AbstractString,
+    regexflags="",
+    prepare="""(p)-> nothing""",
+    ready= s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """,
+    readable= s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ) """,
+    iter=""" (p)-> eachline( readable( p)) """
+    ) = StringCard(
+            sample,
+            Regex(regex, regexflags), # везде обернуть в try
+            prepare|>parse,
+            ready|>parse,
+            readable|>parse,
+            iter|>parse )
 
 
 """
