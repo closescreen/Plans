@@ -21,6 +21,7 @@ export sample
 immutable StringCard
     sample::AbstractString
     regex::Regex
+    need::Expr
     prepare::Expr
     ready::Expr
     readable::Expr
@@ -28,22 +29,74 @@ immutable StringCard
 end    
 export StringCard
 
+const DEFAULT_NEED = """(p)-> nothing"""
+const DEFAULT_PREPARE = """(p)-> nothing"""
+const DEFAULT_READY = s"""(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """
+const DEFAULT_READABLE = s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ) """
+const DEFAULT_ITER = """(p)-> eachline( readable( p))"""
+
+"""Parse <expr> for infornative name <name> and check result and return it. 
+Throw error if wrong."""
+function parsefor( name::AbstractString, expr::AbstractString)::Expr
+ try 
+    p = parse(expr)::Expr 
+    p.head == :incomplete && error("""Incomplete "$name" expression.""")
+    return p 
+ catch e 
+    error("$e\n while parse:\n $expr \n\n $( catch_stacktrace())") 
+ end 
+end
+
+"Not parse. Only check"
+function parsefor( name::AbstractString, expr::Expr)::Expr
+ try 
+    expr.head == :incomplete && error("""Incomplete "$name" expression.""")
+    return expr 
+ catch e 
+    error("$e\n while checking:\n $expr \n\n $( catch_stacktrace())") 
+ end 
+end
+
+
+
 "Constructs StringCard from incomplete params"
 string_card(
     sample::AbstractString,
     regex::AbstractString,
-    regexflags="",
-    prepare="""(p)-> nothing""",
-    ready= s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """,
-    readable= s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ) """,
-    iter=""" (p)-> eachline( readable( p)) """
+    regexflags = "",
+    need = DEFAULT_NEED,
+    prepare = DEFAULT_PREPARE,
+    ready = DEFAULT_READY,
+    readable = DEFAULT_READABLE,
+    iter = DEFAULT_ITER
     ) = StringCard(
             sample,
-            Regex(regex, regexflags), # везде обернуть в try
-            prepare|>parse,
-            ready|>parse,
-            readable|>parse,
-            iter|>parse )
+            try Regex(regex, regexflags) catch e error(
+                """$e\n  regex:'$regex' regexflags:'$regexflags' \n\n  $(catch_stacktrace())""") end,
+            
+            parsefor( "need", need),
+            parsefor( "prepare", prepare ),
+            parsefor( "ready", ready),
+            parsefor( "readable", readable),
+            parsefor( "iter", iter) )
+
+
+string_card(
+    sample::AbstractString,
+    regex::Regex,
+    need = DEFAULT_NEED,
+    prepare = DEFAULT_PREPARE,
+    ready = DEFAULT_READY,
+    readable = DEFAULT_READABLE,
+    iter = DEFAULT_ITER
+    ) = StringCard(
+            sample,
+            regex,
+            parsefor( "need", need),
+            parsefor( "prepare", prepare ),
+            parsefor( "ready", ready),
+            parsefor( "readable", readable),
+            parsefor( "iter", iter) )
 
 
 """
@@ -56,20 +109,28 @@ card( re::AbstractString, flags::AbstractString ) = (s::Sample)->string_card( s.
 export card
 
 
-prepare_will( prepare::AbstractString) = (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, prepare)
+need_will( need::AbstractString) = (sc::StringCard)->string_card( sc.sample, sc.regex, need)
+export need_will
+
+
+prepare_will( prepare::AbstractString) = 
+    (sc::StringCard)->string_card( sc.sample, sc.regex, sc.need, prepare)
 export prepare_will
 
 
-ready_will( ready::AbstractString) = (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, sc.prepare, ready)
+ready_will( ready::AbstractString) = 
+    (sc::StringCard)->string_card( sc.sample, sc.regex, sc.need, sc.prepare, ready)
 export ready_will
 
 
-readable_will( readable::AbstractString ) = (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, sc.prepare, sc.ready, readable)
+readable_will( readable::AbstractString ) = 
+    (sc::StringCard)->string_card( sc.sample, sc.regex, sc.need, sc.prepare, sc.ready, readable)
 export readable_will
 
 
 iter_will( iter::AbstractString) = 
-    (sc::StringCard)->string_card( sc.sample, sc.regex, sc.regexflags, sc.prepare, sc.ready, sc.readable, iter )
+    (sc::StringCard)->
+        string_card( sc.sample, sc.regex, sc.need, sc.prepare, sc.ready, sc.readable, iter )
 export iter_will
 
 
@@ -95,11 +156,11 @@ card( sc::StringCard ) =
         sc, 
         Sample( sc.sample),
         sc.regex,
-        try sc.need|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.need)") end,
-        try sc.prepare|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.prepare)") end,
-        try sc.ready|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.ready)") end,
-        try sc.readable|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.readable)") end,
-        try sc.iter|>eval catch e error("$e\n $( catch_stacktrace()) \n while parse/eval text: $(sc.iter)") end
+        try eval(sc.need)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.need)") end,
+        try eval(sc.prepare)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.prepare)") end,
+        try eval(sc.ready)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.ready)") end,
+        try eval(sc.readable)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.readable)") end,
+        try eval(sc.iter)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.iter)") end
     )
 export card    
 
