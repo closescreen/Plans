@@ -340,7 +340,7 @@ function plan{C<:Card}( cc::Array{C}, adr::AbstractString )::Plan
         w = plan( c, adr)
         typeof(w) <: Solved && return w
     end
-    _trouble(adr)
+    Trouble(adr)
 end
 export plan
 
