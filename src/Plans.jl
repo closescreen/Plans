@@ -149,7 +149,7 @@ end
 export Card
 
 """
-Constricts Card from StringCard
+Constricts compiled Card from StringCard
 """
 card( sc::StringCard ) = 
     Card(
@@ -354,6 +354,9 @@ function plan( c::Card, adr::AbstractString)::Plan
     end
 end
 
+"Auto compile StringCard->Card and then call plan()"
+plan( sc::StringCard, adr::AbstractString)::Plan = plan( card(sc), adr)
+
 
 
 """Recursive find all plans depended from given (and itself) """
@@ -519,12 +522,16 @@ export iter
 sample_plan{C<:Card}( c::C ) = plan( c, c.sample.addr )::Plan
 export sample_plan
 
+sample_plan{SC<:StringCard}( sc::SC ) = sample_plan( card(sc))::Plan
+
 "Returns all sample dependencies as array of p::Plans from c::Card and his 'sample' field."
 function sample_deps{C<:Card}( c::C ) ::Array{Plan}
  p1 = sample_plan(c)
  deps = with_deps( p1, [c])
 end
 export sample_deps
+
+sample_deps{SC<:StringCard}( sc::SC ) :: Array{Plan} = sample_deps( card( sc))
 
 "Returns sample needs of sub-level"
 function sample_need{C<:Card}(c::C) ::Array{String}
@@ -533,6 +540,8 @@ function sample_need{C<:Card}(c::C) ::Array{String}
 end 
 export sample_need
 
+sample_need{SC<:StringCard}(sc::SC) ::Array{String} = sample_need( card( sc))
+
 "Does! prepare on sample."
 function sample_prepare{C<:Card}(c::C) ::Result
  p1 = sample_plan(c)
@@ -540,6 +549,7 @@ function sample_prepare{C<:Card}(c::C) ::Result
 end 
 export sample_prepare 
 
+sample_prepare{SC<:StringCard}(sc::SC) :: Result = sample_prepare( card( sc))
 
 "Does ready() on sample"
 function sample_ready{C<:Card}(c::C) ::Bool
@@ -548,6 +558,7 @@ function sample_ready{C<:Card}(c::C) ::Bool
 end
 export sample_ready
 
+sample_ready{SC<:StringCard}(sc::SC) = sample_ready( sc)
 
 "Does open for read on 'sample' field of card"
 function sample_readable{C<:Card}(c::C)
@@ -556,7 +567,7 @@ function sample_readable{C<:Card}(c::C)
 end
 export sample_readable
 
-
+sample_readable{SC<:StringCard}(sc::SC) = sample_readable( card( sc))
  
 end # module
 
