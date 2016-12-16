@@ -380,7 +380,7 @@ function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
     try rv = plan.card.prepare( plan, needs)
         return Result(rv)
     catch e
-        return Result( ErrorException( "Error in prepare().\nPlan:$plan.\n Exception:$e\n $( catch_stacktrace())" ))
+        return Result( ErrorException( "$e - in prepare().\n Plan:$plan.\n $(catch_stacktrace()) \n prepare: $(plan.card.string_card.prepare)" ))
     end
 end
 
@@ -395,7 +395,7 @@ function ready(plan::Plan )
         end    
         
     catch e
-        error("Error while call plan.card.ready() on $plan : $e ")
+        error("$e - while call plan.card.ready() on $plan. \n $(catch_stacktrace()) \n ready: $(plan.card.string_card.ready)")
     end
 end    
 export ready
@@ -469,6 +469,12 @@ end
 export sample_readable
 
 sample_readable{SC<:StringCard}(sc::SC) = sample_readable( card( sc))
+
+
+"Card matched for any pattern any behave as file"
+const DEFAULT_STRING_CARD = sample( "anydir/anyfile.ext " ) |> card( s".*" )
+"Compiled DEFAULT_STRING_CARD"
+const DEFAULT_CARD = compile(DEFAULT_STRING_CARD)
  
 end # module
 
