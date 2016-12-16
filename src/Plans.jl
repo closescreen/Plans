@@ -29,11 +29,29 @@ immutable StringCard
 end    
 export StringCard
 
-const DEFAULT_NEED = """(p)-> nothing"""
-const DEFAULT_PREPARE = """(p)-> nothing"""
-const DEFAULT_READY = s"""(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """
-const DEFAULT_READABLE = s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ) """
-const DEFAULT_ITER = """(p)-> eachline( readable( p))"""
+import Base.show
+function show( io::IO, sc::StringCard)
+ need = sc.need == DEFAULT_NEED ? s"DEFAULT_NEED" : sc.need
+ prepare = sc.prepare == DEFAULT_PREPARE ? s"DEFAULT_PREPARE" : sc.prepare
+ ready = sc.ready == DEFAULT_READY ? s"DEFAULT_READY" : sc.ready
+ readable = sc.readable == DEFAULT_READABLE ? s"DEFAULT_READABLE" : sc.readable
+ iter = sc.iter == DEFAULT_ITER ? s"DEFAULT_ITER" : sc.iter
+ 
+ print( io, """\n$(sc|>typeof) --------------------------
+sample: $(sc.sample)\nregex: $(sc.regex)
+need: $need
+prepare: $prepare
+ready: $ready
+readable: $readable
+iter: $iter
+-------------------------------------------""")
+end
+
+const DEFAULT_NEED = """(p)-> nothing"""|>parse
+const DEFAULT_PREPARE = """(p)-> nothing"""|>parse
+const DEFAULT_READY = s"""(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """|>parse
+const DEFAULT_READABLE = s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ) """|>parse
+const DEFAULT_ITER = """(p)-> eachline( readable( p))"""|>parse
 
 """Parse <expr> for infornative name <name> and check result and return it. 
 Throw error if wrong."""
@@ -148,10 +166,15 @@ immutable Card
 end
 export Card
 
+show( io::IO, c::Card) = print( io, """$Card (compiled)
+string_card:$(c.string_card)
+""")
+
+
 """
 Constricts compiled Card from StringCard
 """
-card( sc::StringCard ) = 
+compile( sc::StringCard ) = 
     Card(
         sc, 
         Sample( sc.sample),
@@ -162,137 +185,7 @@ card( sc::StringCard ) =
         try eval(sc.readable)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.readable)") end,
         try eval(sc.iter)::Function catch e error("$e\n $( catch_stacktrace()) \n while eval text: $(sc.iter)") end
     )
-export card    
-
-# их можно использовать для дополнительных установок свойств
-#"""
-#Conctructs Card from it params.
-#"""
-#card(
-#    sample::Sample, 
-#    regex::Regex; 
-#    need::Function=(p)->nothing, 
-#    prepare::Function=(p)->nothing, 
-#    ready::Function= (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ), 
-#    readable::Function=(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ),
-#    iter::Function=(p)-> eachline( readable( p))
-#)::Card = 
-#    Card( sample, regex, need, prepare, ready, readable, iter )
-#export card
-#
-#
-#"Sample(\"lala\") |> card( regex, ...)"
-#card( regex::Regex )::Function = 
-#    (s::Sample)-> card( s, regex )
-#
-#
-#"""
-#    Card(...) |> ready_will() do plan
-#        
-#     filesize(\"\$plan\")>0
-#     
-#    end # --> new Card (with 'need' field)
-#"""
-#function ready_will(f::Function)::Function 
-#    plan2 = "" # хотелось бы чтоб и тип был
-#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-#    catch e
-#        error("Bad function signature returned by ready_will() $e")
-#    end    
-#
-#    (c::Card)->
-#        card( c.sample, c.regex, 
-#            need=c.need, prepare=c.prepare, ready=f, readable=c.readable, iter=c.iter)
-#end            
-#export ready_will
-#
-#
-#"""
-#    Card(...) |> need_will() do plan 
-#    
-#       ... use plan.addr::RegexMatch here 
-#      
-#      for create and return vector string
-#    
-#    end # --> new Card (with 'need' field)
-#"""
-#function need_will(f::Function)::Function
-#    plan2 = "" # хотелось бы чтоб и тип был
-#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-#    catch e
-#        error("Bad function signature returned by need_will() $e")
-#    end    
-#
-#    (c::Card)->
-#        card( c.sample, c.regex, need=f, prepare=c.prepare, ready=c.ready, readable=c.readable, iter=c.iter)
-#end
-#export need_will
-#
-#
-#"""
-#    Card(...) |> 
-#    
-#    prepare_will() do plan,needs 
-#    
-#     .... use \"\$plan\" , needs
-#    
-#    end # --> new Card (with 'need' field)
-#    
-#"""
-#function prepare_will(f::Function)::Function  
-#    plan2 = "" # тут хорошо бы получить значения нужных типов
-#    needs2 = ""
-#    try method = @which( f(plan2,needs2)) # будет ошибка если нет метода на аргументах
-#    catch e
-#        error("Bad function signature returned by prepare_will() $e")
-#    end    
-#
-#    (c::Card)->
-#        card( c.sample, c.regex, need=c.need, prepare=f, ready=c.ready, readable=c.readable, iter=c.iter)
-#end        
-#export prepare_will
-#
-#
-#"""
-#    Card(...) |> readable_will() do plan
-#    
-#     .... must return something readable ... 
-#    
-#    end # --> new Card 
-#"""
-#function readable_will(f::Function)::Function 
-#    plan2 = "" # хотелось бы чтоб и тип был
-#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-#    catch e
-#        error("Bad function signature returned by readable_will() $e")
-#    end    
-#
-#    (c::Card)->
-#        card( c.sample, c.regex, 
-#            need=c.need, prepare=c.prepare, ready=c.ready, readable=f, iter=c.iter)
-#end
-#export readable_will
-#
-#
-#"""
-#    Card(...) |> iter_will() do plan 
-#        
-#        .... must return something iterable ... 
-#        
-#    end # --> new Card (with 'need' field)
-#"""
-#function iter_will(f::Function)::Function
-#    plan2 = "" # хотелось бы чтоб и тип был
-#    try method = @which( f(plan2)) # будет ошибка если нет метода на аргументах
-#    catch e
-#        error("Bad function signature returned by iter_will() $e")
-#    end    
-#
-#    (c::Card)->
-#        card( c.sample, c.regex, 
-#            need=c.need, prepare=c.prepare, ready=c.ready, readable=c.readable, iter=f)
-#end
-#export iter_will
+export compile
 
 
 abstract Plan
@@ -304,6 +197,7 @@ immutable Solved<:Plan
     addr::RegexMatch
 end
 
+show( io::IO, s::Solved) = print( io, "$Solved. addr: $(s.addr)", s.card)
 
 
 "Used for unmatched addresses"
@@ -311,6 +205,7 @@ immutable Trouble<:Plan
     addr::AbstractString
 end
 
+show( io::IO, t::Trouble) = print( io, "$Trouble. addr: $(t.addr)")
 
 export Plan, Solved, Trouble
 
@@ -406,6 +301,12 @@ function need{S<:Solved}(p::S)::Array
         else
             error("Eltype of $deps must be AbstractString")
         end    
+    elseif t<: Dict{Symbol}
+        if deps|>values|>eltype <:AbstractString
+            return deps
+        else
+            error("Values type of dict $deps must be <:AbstractString ($(deps|>values|>eltype)). Plan:$plan.")
+        end
     elseif t<: Void
         return AbstractString[]
     else
