@@ -1,8 +1,3 @@
-"""
-Develop with testing:
-
-...
-"""
 module Plans
 
 
