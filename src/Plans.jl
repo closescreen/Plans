@@ -187,6 +187,11 @@ compile( sc::StringCard ) =
     )
 export compile
 
+"compile(c::Card) just return it card"
+compile( c::Card ) = c
+
+"Any other types are bad."
+compile( a::Any) = error( "Bad type for compile: $(a|>typeof). $a" )
 
 abstract Plan
 
@@ -475,6 +480,71 @@ sample_readable{SC<:StringCard}(sc::SC) = sample_readable( card( sc))
 const DEFAULT_STRING_CARD = sample( "anydir/anyfile.ext " ) |> card( s".*" )
 "Compiled DEFAULT_STRING_CARD"
 const DEFAULT_CARD = compile(DEFAULT_STRING_CARD)
+
+
+
+"""
+    Reads cards definitions from file
+    
+    If shell filemask symbols (*|?|{}|[]) exists in filename - it will treat to `find -wholename \"<file>\"` command.
+    
+    defaults=[] - may be array of StringCard(s), 
+    
+    which will be pushed to result after all files loaded.
+"""
+function read_cards_from( file::AbstractString; defaults=[] )
+ concrete_files = ismatch( r"[\*\?\{\[]", file) ?
+    `find -wholename "$file"` |> readlines |> _->map( chomp, _) :
+    [ file ]
+ !isempty(defaults) && push!( concrete_files, defaults... )
+ 
+ cards = Card[]
+ for file in concrete_files
+    card = include( file)
+    try 
+        compiled = compile( card)
+        push!( cards, compiled)    
+    catch e 
+        warn("Bad type ($(card|>typeof)) or value ($card) for compile card. \nCompiled file: \"$file\". \nError: $e. $( catch_stacktrace() )")
+        continue
+    end    
+    
+ end
+ cards
+end
+export read_cards_from
+
+
+
+"""
+    Read cards from files as array of string. 
+    
+    defaults=[Plans.DEFAULT_STRING_CARD] - array of StringCard(s)
+"""
+function read_cards_from{ FF<:Vector{String} }( files::FF; defaults=[Plans.DEFAULT_STRING_CARD] )
+ cards = Card[]
+ sizehint!( cards, length( files))
+ for file in files
+  for subfile in read_cards_from( file) 
+    push!( cards, subfile)
+  end
+ end
+ 
+ for defcard in defaults
+    try 
+        compiled = compile( defcard)
+        push!( cards, compiled)
+    catch e
+        warn("Bad type $(defcard|>typeof) or value ($defcard). ignored.")
+        continue
+    end
+ end            
+            
+ cards    
+end
+
+
+
  
 end # module
 
