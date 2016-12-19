@@ -338,29 +338,37 @@ end
 type Result
  some::Bool
  val
-
- Result() = new( false, ErrorException("Some was wrong...") )
- Result(e::Exception) = new( false, e)
- Result(c) = new( true, c)
+ add
+ 
+ Result( c) = new( true, c, nothing)
+ Result() = new( false, ErrorException("Some was wrong..."), nothing )
+ Result( e::Exception, add...) = new( false, e, add)
+ 
 end
 
-
+"Checks is result has value"
 some( r::Result)::Bool = r.some
+
+"Cecks is result has error"
 iserr( r::Result)::Bool = !r.some
 
-
-import Base.get
+"Get value or thorow exception if result has no value (when has error)"
 val( r::Result) = r.some ? r.val : error("$r has no value")
 val( r::Result, deflt) = r.some ? r.val : deflt
+
+"Get error or thorow exception if result has no error (when has value)"
 err( r::Result ) = !r.some ? r.val : error("$r has no error")
 err( r::Result, deflt ) = !r.some ? r.val : deflt
 
-export Result,some,val,err
+add( r::Result) = !r.some ? r.add : error("$r has no error")
+add( r::Result, deflt) = !r.some ? r.add : deflt
+
+export Result, some, val, iserr, err, add
 
 
 
 "plan -> Result"
-prepare( t::Trouble, other...)::Result = Result(ErrorException("Trouble cant be prepared: $t"))
+prepare( t::Trouble, other...)::Result = Result( ErrorException( "Trouble can't be prepared."), t)
 export prepare
 
 
@@ -372,20 +380,33 @@ end
 "Calls plan.prepare(plan, deps) and return it wrapped into Result"
 function prepare{ S<:Solved, C<:Card }( plan::S, cards::Vector{C} )::Result
     ok = ready( plan)
-    ok==nothing && return Result(ErrorException("ready() return $ok (not implemented for $plan ?)"))
-    typeof(ok)<:Bool || return Result( ErrorException("ready() return $ok. Must return ::Bool"))
+    ok == nothing && return Result( ErrorException( "ready() return $ok (not implemented for $plan ?)"), plan)
+    typeof( ok ) <: Bool || return Result( ErrorException( "ready() return $ok. Must return ::Bool"), plan)
     ok && return Result( plan)
     anddeps = with_deps( plan, cards)
     shift!( anddeps)
     if !isempty( anddeps)
         errors = prepare( anddeps, cards) |> _->filter( iserr, _) |> collect
-        !isempty( errors) && return Result( ErrorException( "Errors: $errors - while prepare $plan"))
-    end    
-    needs = need(plan)
+        !isempty( errors) && return Result( ErrorException( "Errors while prepare $plan"), errors)
+    end
+    needs = need( plan)
     try rv = plan.card.prepare( plan, needs)
-        return Result(rv)
+        must_return = strip( string( plan))
+        if typeof(rv)<:AbstractString
+            if strip(rv) == must_return
+                return Result( plan)
+            else
+                return Result( ErrorException("""Bad return value "$rv".
+                Because prepare() must return String == "$must_return" by convention. 
+                Check prepare() function."""), plan )
+            end
+        else
+            return Result( ErrorException( """Bad return type from prepare(): $(rv|>typeof). 
+            Because prepare() must return String == "$must_return" by convention. 
+            Check prepare() function."""), plan )
+        end    
     catch e
-        return Result( ErrorException( "$e - in prepare().\n Plan:$plan.\n $(catch_stacktrace()) \n prepare: $(plan.card.string_card.prepare)" ))
+        return Result( ErrorException( "$e - in prepare().\n Plan:$plan." ), plan, catch_stacktrace())
     end
 end
 
