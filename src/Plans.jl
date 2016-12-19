@@ -476,27 +476,25 @@ export sample_readable
 sample_readable{SC<:StringCard}(sc::SC) = sample_readable( card( sc))
 
 
-"Card matched for any pattern any behave as file"
-const DEFAULT_STRING_CARD = sample( "anydir/anyfile.ext " ) |> card( s".*" )
-"Compiled DEFAULT_STRING_CARD"
-const DEFAULT_CARD = compile(DEFAULT_STRING_CARD)
+"Card matched for any pattern and behaves as file"
+const DEFAULT_FILE_STRING_CARD = sample( "anydir/anyfile.ext " ) |> card( s".*" )
+export DEFAULT_FILE_STRING_CARD
+
+"Compiled DEFAULT_FILE_STRING_CARD"
+const DEFAULT_FILE_CARD = compile( DEFAULT_FILE_STRING_CARD)
+export DEFAULT_FILE_CARD
 
 
 
 """
-    Reads cards definitions from file
+    read_cards( file::AbstractString ) - reads cards definitions from file
     
     If shell filemask symbols (*|?|{}|[]) exists in filename - it will treat to `find -wholename \"<file>\"` command.
-    
-    defaults=[] - may be array of StringCard(s), 
-    
-    which will be pushed to result after all files loaded.
 """
-function read_cards_from( file::AbstractString; defaults=[] )
+function read_cards( file::AbstractString )
  concrete_files = ismatch( r"[\*\?\{\[]", file) ?
     `find -wholename "$file"` |> readlines |> _->map( chomp, _) :
     [ file ]
- !isempty(defaults) && push!( concrete_files, defaults... )
  
  cards = Card[]
  for file in concrete_files
@@ -512,38 +510,43 @@ function read_cards_from( file::AbstractString; defaults=[] )
  end
  cards
 end
-export read_cards_from
+export read_cards
 
 
 
 """
-    Read cards from files as array of string. 
-    
-    defaults=[Plans.DEFAULT_STRING_CARD] - array of StringCard(s)
+    read_cards(files) - reads cards from files as array of string. 
 """
-function read_cards_from{ FF<:Vector{String} }( files::FF; defaults=[Plans.DEFAULT_STRING_CARD] )
+function read_cards{ FF<:Vector{String} }( files::FF )
  cards = Card[]
  sizehint!( cards, length( files))
  for file in files
-  for subfile in read_cards_from( file) 
+  for subfile in read_cards( file) 
     push!( cards, subfile)
   end
  end
- 
- for defcard in defaults
-    try 
-        compiled = compile( defcard)
-        push!( cards, compiled)
-    catch e
-        warn("Bad type $(defcard|>typeof) or value ($defcard). ignored.")
-        continue
-    end
- end            
-            
  cards    
 end
 
+"read_cards( c::StringCard) -> [ compile( c) ] for composablity"
+read_cards( c::StringCard) = [ compile( c) ]
 
+"read_cards( c::Card) -> [ c ] for composablity"
+read_cards( c::Card) = [ c ]
+
+"""
+    read_cards( source1, source2, source3... ) - read cards from all sources
+    
+    Sources may be a file::String, array of filenames, c::Card, sc::StringCard
+    
+    Sample:
+    
+    read_cards( \"./*card*\", DEFAULT_STRING_CARD )
+    
+"""
+function read_cards( ff1, ff2, other... )
+ push!( read_cards( ff1), read_cards( ff2, other...)... )
+end
 
  
 end # module
