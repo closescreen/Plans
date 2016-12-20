@@ -503,11 +503,11 @@ export DEFAULT_FILE_CARD
 
 
 """
-    read_cards( file::AbstractString ) - reads cards definitions from file
+    read_file_cards( file::AbstractString ) - reads cards definitions from file
     
     If shell filemask symbols (*|?|{}|[]) exists in filename - it will treat to `find -wholename \"<file>\"` command.
 """
-function read_cards( file::AbstractString )
+function read_file_cards( file::AbstractString )
  concrete_files = ismatch( r"[\*\?\{\[]", file) ?
     `find -wholename "$file"` |> readlines |> _->map( chomp, _) :
     [ file ]
@@ -526,42 +526,42 @@ function read_cards( file::AbstractString )
  end
  cards
 end
-export read_cards
+export read_file_cards
 
 
 
 """
-    read_cards(files) - reads cards from files as array of string. 
+    read_file_cards(files) - reads cards from files as array of string. 
 """
-function read_cards{ FF<:Vector{String} }( files::FF )
+function read_file_cards{ FF<:Vector{String} }( files::FF )
  cards = Card[]
  sizehint!( cards, length( files))
  for file in files
-  for subfile in read_cards( file) 
+  for subfile in read_file_cards( file) 
     push!( cards, subfile)
   end
  end
  cards    
 end
 
-"read_cards( c::StringCard) -> [ compile( c) ] for composablity"
-read_cards( c::StringCard) = [ compile( c) ]
+"read_file_cards( c::StringCard) -> [ compile( c) ] for composablity"
+read_file_cards( c::StringCard) = [ compile( c) ]
 
-"read_cards( c::Card) -> [ c ] for composablity"
-read_cards( c::Card) = [ c ]
+"read_file_cards( c::Card) -> [ c ] for composablity"
+read_file_cards( c::Card) = [ c ]
 
 """
-    read_cards( source1, source2, source3... ) - read cards from all sources
+    read_file_cards( source1, source2, source3... ) - read cards from all sources
     
     Sources may be a file::String, array of filenames, c::Card, sc::StringCard
     
     Sample:
     
-    read_cards( \"./*card*\", DEFAULT_STRING_CARD )
+    read_file_cards( \"./*card*\", DEFAULT_STRING_CARD )
     
 """
-function read_cards( ff1, ff2, other... )
- push!( read_cards( ff1), read_cards( ff2, other...)... )
+function read_file_cards( ff1, ff2, other... )
+ push!( read_file_cards( ff1), read_file_cards( ff2, other...)... )
 end
 
  
