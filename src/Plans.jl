@@ -32,7 +32,7 @@ function show( io::IO, sc::StringCard)
  readable = sc.readable == DEFAULT_READABLE ? s"DEFAULT_READABLE" : sc.readable
  iter = sc.iter == DEFAULT_ITER ? s"DEFAULT_ITER" : sc.iter
  
- print( io, """\n$(sc|>typeof) --------------------------
+ print( io, """\n$(sc|>typeof) --------------
 sample: $(sc.sample)\nregex: $(sc.regex)
 need: $need
 prepare: $prepare
@@ -42,6 +42,8 @@ iter: $iter
 -------------------------------------------""")
 end
 
+
+# переписать как функции - это даст возм обработать ошибку параметров
 const DEFAULT_NEED = """(p)-> nothing"""|>parse
 const DEFAULT_PREPARE = """(p)-> nothing"""|>parse
 const DEFAULT_READY = s"""(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """|>parse
@@ -502,6 +504,7 @@ export DEFAULT_FILE_CARD
 
 
 
+
 """
     read_file_cards( file::AbstractString ) - reads cards definitions from file
     
@@ -563,9 +566,49 @@ read_file_cards( c::Card) = [ c ]
 function read_file_cards( ff1, ff2, other... )
  push!( read_file_cards( ff1), read_file_cards( ff2, other...)... )
 end
+ 
+
+# -------------- Cards -------------------------
+
+"Cards Cards"
+immutable Cards
+ custom::Function # which returns array of cards
+ default::Function # which returns array of default cards
+
+ "Cards() - constructrs with defaults"
+ Cards(; 
+        custom=()->read_file_cards("*.card.jl")::Vector{Card}, 
+        default=()->[DEFAULT_FILE_CARD]::Vector{Card} 
+        ) = new( custom, default)
+ 
+end
+export Cards
+
+
+import Base.fetch
+"Returns array of Cards Card's"
+fetch( h::Cards) = fetch( h, h.custom, h.default)::Vector{Card}
+
+function fetch( cc::Cards, f1::Function, ff::Function... )::Vector{Card}
+ rv = Card[]
+ for f in ( f1, ff...)
+    rvi = f()
+    rvitype = typeof(rvi)
+ 
+    rvitype <: Vector{Card} ? 
+        push!( rv, rvi... ) :
+            error( "Bad eltype: function which returns cards must return Vector{Card}. Was returned: $rvitype: $rvi")
+ end
+ rv        
+end
+export fetch
+
+
+
+
 
  
-end # module
+end # module ------------------
 
 
 
