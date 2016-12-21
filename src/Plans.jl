@@ -42,13 +42,13 @@ iter: $iter
 -------------------------------------------""")
 end
 
+# нужны как Expressions:
+const DEFAULT_NEED = :( default_need( plan) = nothing )
+const DEFAULT_PREPARE = :( default_prepare( plan) = nothing )
+const DEFAULT_READY = :( default_ready( pl)=( str=string(pl); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ))
+const DEFAULT_READABLE = :( default_readable( pl) = ( str=string(pl); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ))
+const DEFAULT_ITER = :( default_iter( plan) = eachline( readable( plan)) )
 
-# переписать как функции - это даст возм обработать ошибку параметров
-const DEFAULT_NEED = """(p)-> nothing"""|>parse
-const DEFAULT_PREPARE = """(p)-> nothing"""|>parse
-const DEFAULT_READY = s"""(p)-> ( str=string(p); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ) """|>parse
-const DEFAULT_READABLE = s""" (p)-> ( str=string(p); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ) """|>parse
-const DEFAULT_ITER = """(p)-> eachline( readable( p))"""|>parse
 
 """Parse <expr> for infornative name <name> and check result and return it. 
 Throw error if wrong."""
