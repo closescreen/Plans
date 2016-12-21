@@ -43,11 +43,11 @@ iter: $iter
 end
 
 # нужны как Expressions:
-const DEFAULT_NEED = :( default_need( plan) = nothing )
-const DEFAULT_PREPARE = :( default_prepare( plan) = nothing )
-const DEFAULT_READY = :( default_ready( pl)=( str=string(pl); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ))
-const DEFAULT_READABLE = :( default_readable( pl) = ( str=string(pl); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ))
-const DEFAULT_ITER = :( default_iter( plan) = eachline( readable( plan)) )
+const DEFAULT_NEED = :(( plan) -> nothing)
+const DEFAULT_PREPARE = :(( plan) -> nothing)
+const DEFAULT_READY = :(( pl) -> ( str=string(pl); ismatch( r"\.gz(?=ip)$"i, str) ? filesize( str)>20 : filesize( str)>0 ))
+const DEFAULT_READABLE = :(( pl) -> ( str=string(pl); ismatch( r"\.gz(?=ip)?$"i, str) ? `zcat $str` : str ))
+const DEFAULT_ITER = :(( plan) -> eachline( readable( plan)))
 
 
 """Parse <expr> for infornative name <name> and check result and return it. 
@@ -163,6 +163,28 @@ immutable Card
 end
 export Card
 
+
+
+"""Reperesents Cards collection. Has fileds:
+
+    custom - function which returns Vector of user-defined cards
+    
+    default - function return Vector of default cards
+"""
+immutable Cards
+ custom::Function # which returns Vector of cards
+ default::Function # which returns Vector of default cards
+
+ "Cards() - constructrs with defaults"
+ Cards(; 
+        custom=()->read_file_cards("*.card.jl")::Vector{Card}, 
+        default=()->[DEFAULT_FILE_CARD]::Vector{Card} 
+        ) = new( custom, default)
+ 
+end
+export Cards
+
+
 show( io::IO, c::Card) = print( io, """$Card (compiled)
 string_card:$(c.string_card)
 """)
@@ -231,8 +253,15 @@ tmpname(t::Trouble) = join( (p.addr, "TMP"), '.')
 export tmpname
 
 
-"(Array{cards}, address) -> plan"
-function plan{C<:Card}( cc::Array{C}, adr::AbstractString )::Plan
+plan( cc::Cards, adr::AbstractString )::Plan = plan( fetch(cc), adr)
+
+
+plan{C<:Card}( cc1::Vector{C}, cc2::Vector{C}, cci::Vector{C}, adr::AbstractString )::Plan = 
+                                        plan( Card[ cc1..., cc2..., cci... ], adr::AbstractString  )
+
+
+"(Vector{cards}, address) -> plan"
+function plan{C<:Card}( cc::Vector{C}, adr::AbstractString )::Plan
     for c in cc
         w = plan( c, adr)
         typeof(w) <: Solved && return w
@@ -257,47 +286,47 @@ plan( sc::StringCard, adr::AbstractString)::Plan = plan( card(sc), adr)
 
 
 """Recursive find all plans depended from given (and itself) """
-with_deps{C<:Card}( plan::Solved, cc::Array{C} ) ::Array{Plan} = _plans( Plan[], plan, cc)
+with_deps{C<:Card}( plan::Solved, cc::Vector{C} ) ::Vector{Plan} = _plans( Plan[], plan, cc)
 export with_deps
 
 
-with_deps{T<:Trouble}( t::T, other... ) ::Array{Plan} = Plan[t]
+with_deps{T<:Trouble}( t::T, other... ) ::Vector{Plan} = Plan[t]
 
 
-"""( target-array[plans], plan, Array[cards] ) -> target-array[plans]
-    where target-array[plans] is preallocated Array{Plan} to store result """
-function _plans{P<:Plan,C<:Card}( pp::Array{P}, p::Plan, cc::Array{C} ) ::Array{Plan}
+"""( target-Vector[plans], plan, Vector[cards] ) -> target-Vector[plans]
+    where target-Vector[plans] is preallocated Vector{Plan} to store result """
+function _plans{P<:Plan,C<:Card}( pp::Vector{P}, p::Plan, cc::Vector{C} ) ::Vector{Plan}
     push!(pp, p)
-    adrs = need(p)::Array
+    adrs = need(p)::Vector
     _plans( pp, adrs, cc)
 end
 
 
-"""( target-array[plans], Array[addresses], Array[cards] ) -> target-array[plans]
-    where target-array[plans] is preallocated Array{Plan} to store result"""
-function _plans{P<:Plan,S<:AbstractString,C<:Card}( pp::Array{P}, adrs::Array{S}, cc::Array{C} ) ::Array{Plan}
+"""( target-Vector[plans], Vector[addresses], Vector[cards] ) -> target-Vector[plans]
+    where target-Vector[plans] is preallocated Vector{Plan} to store result"""
+function _plans{P<:Plan,S<:AbstractString,C<:Card}( pp::Vector{P}, adrs::Vector{S}, cc::Vector{C} ) ::Vector{Plan}
     isempty(adrs) && return pp
     next_adr::S = shift!(adrs)
-    _plans( _plans( pp::Array{P}, next_adr, cc)::Array{Plan}, adrs::Array{S}, cc)
+    _plans( _plans( pp::Vector{P}, next_adr, cc)::Vector{Plan}, adrs::Vector{S}, cc)
 end
 
 
-"""( target-array[plans], address, Array[cards] ) -> target-array[plans]
-    where target-array is preallocated Array{Plan}  to store result"""
-function _plans{P<:Plan,S<:AbstractString,C<:Card}( pp::Array{P}, adr::S, cc::Array{C}) ::Array{Plan}
+"""( target-Vector[plans], address, Vector[cards] ) -> target-Vector[plans]
+    where target-Vector is preallocated Vector{Plan}  to store result"""
+function _plans{P<:Plan,S<:AbstractString,C<:Card}( pp::Vector{P}, adr::S, cc::Vector{C}) ::Vector{Plan}
     push!(pp, plan( cc, adr))
 end
 
 
-"need(p::Plan) returns -> Array[needs] of dependencies of next sub level"
-need(::Trouble)::Array = AbstractString[]
+"need(p::Plan) returns -> Vector[needs] of dependencies of next sub level"
+need(::Trouble)::Vector = AbstractString[]
 export need
 
 
-function need{S<:Solved}(p::S)::Array
+function need{S<:Solved}(p::S)::Vector
     deps = p.card.need(p)
     t = typeof(deps)
-    if t <: Array 
+    if t <: Vector 
         if eltype(deps)<:AbstractString
             return deps
         else
@@ -312,7 +341,7 @@ function need{S<:Solved}(p::S)::Array
     elseif t<: Void
         return AbstractString[]
     else
-        error("$p: need() must return Array, but was returned $t : $deps")
+        error("$p: need() must return Vector, but was returned $t : $deps")
     end
 end
 
@@ -369,7 +398,7 @@ prepare( t::Trouble, other...)::Result = Result( ErrorException( "Trouble can't 
 export prepare
 
 
-function prepare{ P<:Plan, C<:Card }( plans::Vector{P}, cards::Vector{C} )::Array{Result}
+function prepare{ P<:Plan, C<:Card }( plans::Vector{P}, cards::Vector{C} )::Vector{Result}
  map( _->prepare( _, cards), plans)
 end
 
@@ -448,23 +477,23 @@ export sample_plan
 
 sample_plan{SC<:StringCard}( sc::SC ) = sample_plan( card(sc))::Plan
 
-"Returns all sample dependencies as array of p::Plans from c::Card and his 'sample' field."
-function sample_deps{C<:Card}( c::C ) ::Array{Plan}
+"Returns all sample dependencies as Vector of p::Plans from c::Card and his 'sample' field."
+function sample_deps{C<:Card}( c::C ) ::Vector{Plan}
  p1 = sample_plan(c)
  deps = with_deps( p1, [c])
 end
 export sample_deps
 
-sample_deps{SC<:StringCard}( sc::SC ) :: Array{Plan} = sample_deps( card( sc))
+sample_deps{SC<:StringCard}( sc::SC ) :: Vector{Plan} = sample_deps( card( sc))
 
 "Returns sample needs of sub-level"
-function sample_need{C<:Card}(c::C) ::Array{String}
+function sample_need{C<:Card}(c::C) ::Vector{String}
  p1 = sample_plan(c)
  needs = need(p1)
 end 
 export sample_need
 
-sample_need{SC<:StringCard}(sc::SC) ::Array{String} = sample_need( card( sc))
+sample_need{SC<:StringCard}(sc::SC) ::Vector{String} = sample_need( card( sc))
 
 "Does! prepare on sample."
 function sample_prepare{C<:Card}(c::C) ::Result
@@ -534,7 +563,7 @@ export read_file_cards
 
 
 """
-    read_file_cards(files) - reads cards from files as array of string. 
+    read_file_cards(files) - reads cards from files as Vector of string. 
 """
 function read_file_cards{ FF<:Vector{String} }( files::FF )
  cards = Card[]
@@ -556,7 +585,7 @@ read_file_cards( c::Card) = [ c ]
 """
     read_file_cards( source1, source2, source3... ) - read cards from all sources
     
-    Sources may be a file::String, array of filenames, c::Card, sc::StringCard
+    Sources may be a file::String, Vector of filenames, c::Card, sc::StringCard
     
     Sample:
     
@@ -564,29 +593,15 @@ read_file_cards( c::Card) = [ c ]
     
 """
 function read_file_cards( ff1, ff2, other... )
- push!( read_file_cards( ff1), read_file_cards( ff2, other...)... )
+ append!( read_file_cards( ff1), read_file_cards( ff2, other...) )
 end
  
 
-# -------------- Cards -------------------------
 
-"Cards Cards"
-immutable Cards
- custom::Function # which returns array of cards
- default::Function # which returns array of default cards
-
- "Cards() - constructrs with defaults"
- Cards(; 
-        custom=()->read_file_cards("*.card.jl")::Vector{Card}, 
-        default=()->[DEFAULT_FILE_CARD]::Vector{Card} 
-        ) = new( custom, default)
- 
-end
-export Cards
 
 
 import Base.fetch
-"Returns array of Cards Card's"
+"Returns Vector of Cards Card's"
 fetch( h::Cards) = fetch( h, h.custom, h.default)::Vector{Card}
 
 function fetch( cc::Cards, f1::Function, ff::Function... )::Vector{Card}
@@ -596,7 +611,7 @@ function fetch( cc::Cards, f1::Function, ff::Function... )::Vector{Card}
     rvitype = typeof(rvi)
  
     rvitype <: Vector{Card} ? 
-        push!( rv, rvi... ) :
+        append!( rv, rvi ) :
             error( "Bad eltype: function which returns cards must return Vector{Card}. Was returned: $rvitype: $rvi")
  end
  rv        
